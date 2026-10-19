@@ -1,6 +1,7 @@
 package com.example.personalfitnessapp.ui.navigation
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -29,9 +30,7 @@ import com.example.personalfitnessapp.ui.browser.ExerciseBrowserScreen
 import com.example.personalfitnessapp.ui.coach.CoachChatScreen
 import com.example.personalfitnessapp.ui.detail.ExerciseDetailScreen
 import com.example.personalfitnessapp.ui.detail.ExerciseHistoryScreen
-import com.example.personalfitnessapp.ui.history.SessionDetailScreen
 import com.example.personalfitnessapp.ui.history.SessionHistoryScreen
-import com.example.personalfitnessapp.ui.home.HomeScreen
 import com.example.personalfitnessapp.ui.metrics.BodyMetricsScreen
 import com.example.personalfitnessapp.ui.onboarding.OnboardingScreen
 import com.example.personalfitnessapp.ui.photo.PhotoCaptureScreen
@@ -42,20 +41,26 @@ import com.example.personalfitnessapp.ui.routines.RoutineEditorScreen
 import com.example.personalfitnessapp.ui.routines.RoutinesScreen
 import com.example.personalfitnessapp.ui.routines.WeeklyScheduleScreen
 import com.example.personalfitnessapp.ui.session.ExercisePickerScreen
-import com.example.personalfitnessapp.ui.session.WorkoutSessionScreen
 import com.example.personalfitnessapp.ui.settings.AiConnectionScreen
 import com.example.personalfitnessapp.ui.settings.SettingsScreen
 import com.example.personalfitnessapp.ui.swap.SwapScreen
-import com.example.personalfitnessapp.ui.today.TodayScreen
+import com.example.personalfitnessapp.ui.workout.ActiveWorkoutScreen
+import com.example.personalfitnessapp.ui.workout.AddExerciseScreen
+import com.example.personalfitnessapp.ui.workout.CelebrationScreen
+import com.example.personalfitnessapp.ui.workout.EditWorkoutScreen
+import com.example.personalfitnessapp.ui.workout.HomeFeedScreen
+import com.example.personalfitnessapp.ui.workout.MenuNav
+import com.example.personalfitnessapp.ui.workout.PickerResult
+import com.example.personalfitnessapp.ui.workout.SaveWorkoutScreen
+import com.example.personalfitnessapp.ui.workout.WorkoutDetailScreen
+import com.example.personalfitnessapp.ui.workout.WorkoutPill
+import com.example.personalfitnessapp.ui.workout.WorkoutPillViewModel
+import com.example.personalfitnessapp.ui.workout.WorkoutTabScreen
 
 /**
- * Bottom nav is 3 tabs (Home / Workout / Profile) per docs/00_overview.md and
- * docs/01_design_system.md, not the 6-tab bar this app had before the
- * Hevy-UX pass. WORKOUT_TAB reuses the existing "Today" screen (start/resume
- * a workout, today's routine, recovery warning) since that's functionally
- * docs/screens/workout_tab.md's content; ROUTINES, SESSION_HISTORY,
- * BODY_METRICS, RECOVERY, COACH, EXERCISE_BROWSER move behind the Profile
- * hub instead of being top-level tabs.
+ * Bottom nav is 3 tabs (Home / Workout / Profile) per docs/00_overview.md. The live workout
+ * is a full-screen route; minimizing it pops back to the tabs, where [WorkoutPill] floats
+ * above the bottom nav (docs/screens/active_workout.md §16).
  */
 object Routes {
     const val ONBOARDING = "onboarding"
@@ -66,7 +71,11 @@ object Routes {
     const val EXERCISE_DETAIL = "exercise_detail/{exerciseId}"
     const val EXERCISE_HISTORY = "exercise_history/{exerciseId}"
     const val SETTINGS = "settings"
-    const val WORKOUT_SESSION = "workout_session?routineId={routineId}"
+    const val ACTIVE_WORKOUT = "active_workout"
+    const val EDIT_WORKOUT = "edit_workout/{sessionId}"
+    const val ADD_EXERCISE = "add_exercise?single={single}"
+    const val SAVE_WORKOUT = "save_workout"
+    const val CELEBRATION = "celebration/{sessionId}"
     const val EXERCISE_PICKER = "exercise_picker"
     const val SESSION_HISTORY = "session_history"
     const val BODY_METRICS = "body_metrics"
@@ -86,8 +95,9 @@ object Routes {
     fun photoConfirmation(photoPath: String) = "photo_confirmation/${android.net.Uri.encode(photoPath)}"
     fun sessionDetail(sessionId: Long) = "session_detail/$sessionId"
     fun routineEditor(routineId: Long) = "routine_editor/$routineId"
-    fun workoutSession(routineId: Long? = null) =
-        if (routineId == null) "workout_session" else "workout_session?routineId=$routineId"
+    fun editWorkout(sessionId: Long) = "edit_workout/$sessionId"
+    fun addExercise(single: Boolean) = "add_exercise?single=$single"
+    fun celebration(sessionId: Long) = "celebration/$sessionId"
 
     fun swapInSession(sessionId: Long, exerciseId: String, routineId: Long?): String {
         val base = "swap/SESSION/$sessionId/$exerciseId"
@@ -119,12 +129,23 @@ fun AppNavHost(
     }
 
     val backStackEntry by navController.currentBackStackEntryAsState()
-    val showBottomBar = backStackEntry?.destination?.route in TOP_LEVEL_ROUTES
+    val route = backStackEntry?.destination?.route
+    val showBottomBar = route in TOP_LEVEL_ROUTES || route == Routes.SESSION_DETAIL
+    val pillViewModel: WorkoutPillViewModel = hiltViewModel()
+    val activeWorkout by pillViewModel.active.collectAsState()
+    val menuNav = MenuNav(
+        onCopied = { navController.navigate(Routes.ACTIVE_WORKOUT) },
+        onEdit = { id -> navController.navigate(Routes.editWorkout(id)) },
+        onRoutineSaved = { id -> navController.navigate(Routes.routineEditor(id)) },
+    )
 
     Scaffold(
         bottomBar = {
             if (showBottomBar) {
-                AppBottomBar(navController = navController, currentEntry = backStackEntry)
+                Column {
+                    if (activeWorkout != null) WorkoutPill(onOpen = { navController.navigate(Routes.ACTIVE_WORKOUT) }, viewModel = pillViewModel)
+                    AppBottomBar(navController = navController, currentEntry = backStackEntry)
+                }
             }
         },
     ) { padding ->
@@ -143,19 +164,19 @@ fun AppNavHost(
                 )
             }
             composable(Routes.HOME) {
-                HomeScreen(
-                    onStartWorkoutClick = { navController.navigateToTopLevel(Routes.WORKOUT_TAB) },
+                HomeFeedScreen(
+                    onWorkoutClick = { id -> navController.navigate(Routes.sessionDetail(id)) },
+                    onStartWorkout = { navController.navigateToTopLevel(Routes.WORKOUT_TAB) },
+                    onExerciseClick = { id -> navController.navigate(Routes.exerciseDetail(id)) },
+                    onCoach = { navController.navigate(Routes.COACH) },
+                    nav = menuNav,
                 )
             }
             composable(Routes.WORKOUT_TAB) {
-                TodayScreen(
-                    onStartRoutine = { routineId ->
-                        navController.navigate(Routes.workoutSession(routineId))
-                    },
-                    onResumeSession = { navController.navigate(Routes.workoutSession()) },
-                    onStartEmpty = { navController.navigate(Routes.workoutSession()) },
-                    onViewRoutines = { navController.navigate(Routes.ROUTINES) },
-                    onViewRecovery = { navController.navigate(Routes.RECOVERY) },
+                WorkoutTabScreen(
+                    onOpenWorkout = { navController.navigate(Routes.ACTIVE_WORKOUT) },
+                    onRoutines = { navController.navigate(Routes.ROUTINES) },
+                    onCoach = { navController.navigate(Routes.COACH) },
                 )
             }
             composable(Routes.PROFILE) {
@@ -211,31 +232,64 @@ fun AppNavHost(
             composable(Routes.AI_CONNECTION) {
                 AiConnectionScreen(onBackClick = { navController.popBackStack() })
             }
+            composable(Routes.ACTIVE_WORKOUT) { entry ->
+                ActiveWorkoutScreen(
+                    picker = entry.pickerResult(),
+                    onPickerConsumed = { entry.clearPickerResult() },
+                    onMinimize = { navController.popBackStack() },
+                    onFinish = { navController.navigate(Routes.SAVE_WORKOUT) },
+                    onAddExercise = { navController.navigate(Routes.addExercise(single = false)) },
+                    onReplaceExercise = { navController.navigate(Routes.addExercise(single = true)) },
+                    onExerciseClick = { id -> navController.navigate(Routes.exerciseDetail(id)) },
+                    onSettings = { navController.navigate(Routes.SETTINGS) },
+                    onCoach = { navController.navigate(Routes.COACH) },
+                    onDiscarded = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.EDIT_WORKOUT) { entry ->
+                EditWorkoutScreen(
+                    picker = entry.pickerResult(),
+                    onPickerConsumed = { entry.clearPickerResult() },
+                    onClose = { navController.popBackStack() },
+                    onAddExercise = { navController.navigate(Routes.addExercise(single = false)) },
+                    onReplaceExercise = { navController.navigate(Routes.addExercise(single = true)) },
+                    onExerciseClick = { id -> navController.navigate(Routes.exerciseDetail(id)) },
+                )
+            }
             composable(
-                Routes.WORKOUT_SESSION,
+                Routes.ADD_EXERCISE,
                 arguments = listOf(
-                    androidx.navigation.navArgument("routineId") {
+                    androidx.navigation.navArgument("single") {
                         type = androidx.navigation.NavType.StringType
-                        nullable = true
+                        defaultValue = "false"
                     }
                 ),
             ) { entry ->
-                val routineId = entry.arguments?.getString("routineId")?.toLongOrNull()
-                val pendingExerciseId = entry.savedStateHandle.get<String>("pickedExerciseId")
-                WorkoutSessionScreen(
-                    onAddExerciseClick = { navController.navigate(Routes.EXERCISE_PICKER) },
-                    onEndSessionClick = { navController.navigateToTopLevel(Routes.SESSION_HISTORY) },
-                    onDiscardSession = { navController.navigateToTopLevel(Routes.WORKOUT_TAB) },
-                    onSwapClick = { sid, exerciseId, rid ->
-                        navController.navigate(Routes.swapInSession(sid, exerciseId, rid))
+                val single = entry.arguments?.getString("single") == "true"
+                AddExerciseScreen(
+                    onCancel = { navController.popBackStack() },
+                    onDone = { ids ->
+                        navController.previousBackStackEntry?.savedStateHandle?.let { handle ->
+                            if (single) handle[REPLACEMENT_KEY] = ids.first() else handle[PICKED_KEY] = ArrayList(ids)
+                        }
+                        navController.popBackStack()
                     },
-                    onExerciseHistoryClick = { id -> navController.navigate(Routes.exerciseHistory(id)) },
-                    pendingExerciseId = pendingExerciseId,
-                    onPendingExerciseConsumed = {
-                        entry.savedStateHandle.remove<String>("pickedExerciseId")
-                    },
-                    startRoutineId = routineId,
+                    onInfo = { id -> navController.navigate(Routes.exerciseDetail(id)) },
                 )
+            }
+            composable(Routes.SAVE_WORKOUT) {
+                SaveWorkoutScreen(
+                    onBack = { navController.popBackStack() },
+                    onSaved = { id ->
+                        navController.navigate(Routes.celebration(id)) {
+                            popUpTo(Routes.ACTIVE_WORKOUT) { inclusive = true }
+                        }
+                    },
+                    onDiscarded = { navController.popBackStack(Routes.ACTIVE_WORKOUT, inclusive = true) },
+                )
+            }
+            composable(Routes.CELEBRATION) {
+                CelebrationScreen(onDone = { navController.navigateToTopLevel(Routes.HOME) })
             }
             composable(Routes.EXERCISE_PICKER) {
                 ExercisePickerScreen(
@@ -256,12 +310,15 @@ fun AppNavHost(
                 )
             }
             composable(Routes.SESSION_DETAIL) {
-                SessionDetailScreen(
-                    onBackClick = { navController.popBackStack() },
-                    onDeleted = {
-                        navController.previousBackStackEntry?.savedStateHandle?.set("sessionDeleted", true)
-                        navController.popBackStack()
-                    },
+                WorkoutDetailScreen(
+                    onBack = { navController.popBackStack() },
+                    onExerciseClick = { id -> navController.navigate(Routes.exerciseDetail(id)) },
+                    nav = MenuNav(
+                        onCopied = menuNav.onCopied,
+                        onEdit = menuNav.onEdit,
+                        onRoutineSaved = menuNav.onRoutineSaved,
+                        onDeleted = { navController.popBackStack() },
+                    ),
                 )
             }
             composable(Routes.BODY_METRICS) {
@@ -350,4 +407,19 @@ private fun NavHostController.navigateToTopLevel(route: String) {
         launchSingleTop = true
         restoreState = true
     }
+}
+
+private const val PICKED_KEY = "pickedExerciseIds"
+private const val REPLACEMENT_KEY = "replacementExerciseId"
+
+@Composable
+private fun NavBackStackEntry.pickerResult(): PickerResult {
+    val added by savedStateHandle.getStateFlow<ArrayList<String>?>(PICKED_KEY, null).collectAsState()
+    val replacement by savedStateHandle.getStateFlow<String?>(REPLACEMENT_KEY, null).collectAsState()
+    return PickerResult(added, replacement)
+}
+
+private fun NavBackStackEntry.clearPickerResult() {
+    savedStateHandle[PICKED_KEY] = null
+    savedStateHandle[REPLACEMENT_KEY] = null
 }

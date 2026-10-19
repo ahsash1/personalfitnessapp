@@ -15,6 +15,7 @@ import com.example.personalfitnessapp.data.local.dao.RoutineScheduleDao
 import com.example.personalfitnessapp.data.local.dao.SessionExerciseDao
 import com.example.personalfitnessapp.data.local.dao.SetLogDao
 import com.example.personalfitnessapp.data.local.dao.UserProfileDao
+import com.example.personalfitnessapp.data.local.dao.WorkoutLogDao
 import com.example.personalfitnessapp.data.local.dao.WorkoutSessionDao
 import com.example.personalfitnessapp.data.local.entity.ActiveRestTimerEntity
 import com.example.personalfitnessapp.data.local.entity.AppMetaEntity
@@ -46,7 +47,7 @@ import com.example.personalfitnessapp.data.local.entity.WorkoutSessionEntity
         SessionExerciseEntity::class,
         ChatMessageEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -64,6 +65,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun activeRestTimerDao(): ActiveRestTimerDao
     abstract fun sessionExerciseDao(): SessionExerciseDao
     abstract fun chatMessageDao(): ChatMessageDao
+    abstract fun workoutLogDao(): WorkoutLogDao
 
     companion object {
         const val DATABASE_NAME = "personal_fitness_app.db"

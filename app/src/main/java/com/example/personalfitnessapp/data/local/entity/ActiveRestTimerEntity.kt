@@ -11,4 +11,6 @@ data class ActiveRestTimerEntity(
     val exerciseName: String,
     val endAtEpochMillis: Long?,
     val pausedRemainingMillis: Long?,
+    /** The full rest length, for the shrinking progress bar; changes with -15/+15. */
+    val totalMillis: Long? = null,
 )

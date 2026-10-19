@@ -26,5 +26,31 @@ object Migrations {
         }
     }
 
-    val ALL: Array<Migration> = arrayOf(MIGRATION_2_3, MIGRATION_3_4)
+    /**
+     * Hevy-style logging: workout title/gym/photos/in-progress draft, set types, cardio
+     * values, PR badges, per-exercise rest and supersets, pinned notes, custom exercise
+     * types, and the rest timer's total length. Every column is nullable, so existing
+     * rows read as "normal set, no extras".
+     */
+    private val MIGRATION_4_5 = object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            listOf(
+                "ALTER TABLE `workout_sessions` ADD COLUMN `title` TEXT",
+                "ALTER TABLE `workout_sessions` ADD COLUMN `gym` TEXT",
+                "ALTER TABLE `workout_sessions` ADD COLUMN `mediaUris` TEXT",
+                "ALTER TABLE `workout_sessions` ADD COLUMN `draftJson` TEXT",
+                "ALTER TABLE `set_logs` ADD COLUMN `setType` TEXT",
+                "ALTER TABLE `set_logs` ADD COLUMN `distanceKm` REAL",
+                "ALTER TABLE `set_logs` ADD COLUMN `durationSec` INTEGER",
+                "ALTER TABLE `set_logs` ADD COLUMN `prBadges` TEXT",
+                "ALTER TABLE `session_exercises` ADD COLUMN `restSeconds` INTEGER",
+                "ALTER TABLE `session_exercises` ADD COLUMN `supersetGroup` INTEGER",
+                "ALTER TABLE `exercises` ADD COLUMN `pinnedNote` TEXT",
+                "ALTER TABLE `exercises` ADD COLUMN `exerciseType` TEXT",
+                "ALTER TABLE `active_rest_timer` ADD COLUMN `totalMillis` INTEGER",
+            ).forEach(db::execSQL)
+        }
+    }
+
+    val ALL: Array<Migration> = arrayOf(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
 }

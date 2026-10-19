@@ -31,4 +31,11 @@ data class ExerciseEntity(
     /** True once the user has manually edited a seed-sourced row; re-seeding on a
      * dataset version bump then skips it instead of overwriting their edit. */
     val userEdited: Boolean = false,
+    /** "Pinned exercise notes" from the How to tab; shown on the exercise's card in a workout. */
+    val pinnedNote: String? = null,
+    /** Set for custom exercises; seed exercises derive theirs from category/equipment. */
+    val exerciseType: ExerciseType? = null,
 )
+
+/** Which columns the set table shows (docs/screens/active_workout.md, cardio rows). */
+enum class ExerciseType { WEIGHT_REPS, REPS_ONLY, DURATION, DISTANCE_DURATION }

@@ -9,7 +9,13 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-data class ActiveRestTimer(val exerciseId: String, val exerciseName: String, val state: RestTimerState)
+data class ActiveRestTimer(
+    val exerciseId: String,
+    val exerciseName: String,
+    val state: RestTimerState,
+    /** Full length including -15/+15 adjustments, for the shrinking progress bar. */
+    val totalMillis: Long = 0,
+)
 
 interface RestTimerRepository {
     fun observe(): Flow<ActiveRestTimer?>
@@ -31,6 +37,7 @@ class RestTimerRepositoryImpl @Inject constructor(
                 exerciseId = it.exerciseId,
                 exerciseName = it.exerciseName,
                 state = RestTimerState(it.endAtEpochMillis, it.pausedRemainingMillis),
+                totalMillis = it.totalMillis ?: 0,
             )
         }
     }
@@ -40,6 +47,7 @@ class RestTimerRepositoryImpl @Inject constructor(
             exerciseId = it.exerciseId,
             exerciseName = it.exerciseName,
             state = RestTimerState(it.endAtEpochMillis, it.pausedRemainingMillis),
+            totalMillis = it.totalMillis ?: 0,
         )
     }
 
@@ -51,6 +59,7 @@ class RestTimerRepositoryImpl @Inject constructor(
                 exerciseName = exerciseName,
                 endAtEpochMillis = state.endAtEpochMillis,
                 pausedRemainingMillis = state.pausedRemainingMillis,
+                totalMillis = durationSeconds * 1000L,
             )
         )
     }
@@ -59,8 +68,21 @@ class RestTimerRepositoryImpl @Inject constructor(
 
     override suspend fun resume() = updateState { RestTimerEngine.resume(it, clock.millis()) }
 
-    override suspend fun adjustSeconds(deltaSeconds: Int) =
-        updateState { RestTimerEngine.adjust(it, deltaSeconds * 1000L, clock.millis()) }
+    override suspend fun adjustSeconds(deltaSeconds: Int) {
+        val current = dao.get() ?: return
+        val now = clock.millis()
+        val state = RestTimerState(current.endAtEpochMillis, current.pausedRemainingMillis)
+        val adjusted = RestTimerEngine.adjust(state, deltaSeconds * 1000L, now)
+        val total = ((current.totalMillis ?: state.remainingMillis(now)) + deltaSeconds * 1000L)
+            .coerceAtLeast(adjusted.remainingMillis(now))
+        dao.set(
+            current.copy(
+                endAtEpochMillis = adjusted.endAtEpochMillis,
+                pausedRemainingMillis = adjusted.pausedRemainingMillis,
+                totalMillis = total,
+            )
+        )
+    }
 
     override suspend fun skip() = dao.clear()
 

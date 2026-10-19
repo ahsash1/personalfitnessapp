@@ -22,7 +22,17 @@ data class WorkoutSessionEntity(
     val startedAt: Long,
     val endedAt: Long?,
     val routineId: Long?,
+    /** The workout's description ("How did your workout go?"). */
     val notes: String,
+    /** Null until saved; an empty title is replaced by the auto title on save. */
+    val title: String? = null,
+    val gym: String? = null,
+    val mediaUris: List<String>? = null,
+    /**
+     * While the workout is in progress (endedAt == null), the whole editable set table
+     * as JSON ([com.example.personalfitnessapp.domain.workout.WorkoutDraft]). Cleared on save.
+     */
+    val draftJson: String? = null,
 )
 
 @Entity(
@@ -52,4 +62,20 @@ data class SetLogEntity(
     val reps: Int,
     val rpe: Float?,
     val completedAt: Long,
-)
+    /** Null means a normal working set (rows logged before set types existed). */
+    val setType: SetType? = null,
+    val distanceKm: Float? = null,
+    val durationSec: Int? = null,
+    /** Records this set broke when it was logged, e.g. "WEIGHT,ONE_RM"; recomputed on every save. */
+    val prBadges: String? = null,
+) {
+    val type: SetType get() = setType ?: SetType.NORMAL
+}
+
+/** Hevy's set types (img 24). Warm-ups count toward Sets but not volume or records. */
+enum class SetType(val letter: String) {
+    NORMAL(""),
+    WARMUP("W"),
+    FAILURE("F"),
+    DROP("D"),
+}

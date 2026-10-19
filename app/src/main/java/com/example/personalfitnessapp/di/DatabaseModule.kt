@@ -16,6 +16,7 @@ import com.example.personalfitnessapp.data.local.dao.RoutineScheduleDao
 import com.example.personalfitnessapp.data.local.dao.SessionExerciseDao
 import com.example.personalfitnessapp.data.local.dao.SetLogDao
 import com.example.personalfitnessapp.data.local.dao.UserProfileDao
+import com.example.personalfitnessapp.data.local.dao.WorkoutLogDao
 import com.example.personalfitnessapp.data.local.dao.WorkoutSessionDao
 import dagger.Module
 import dagger.Provides
@@ -75,4 +76,7 @@ object DatabaseModule {
 
     @Provides
     fun provideChatMessageDao(db: AppDatabase): ChatMessageDao = db.chatMessageDao()
+
+    @Provides
+    fun provideWorkoutLogDao(db: AppDatabase): WorkoutLogDao = db.workoutLogDao()
 }

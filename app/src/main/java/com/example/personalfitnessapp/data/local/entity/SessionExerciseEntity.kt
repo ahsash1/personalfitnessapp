@@ -30,4 +30,8 @@ data class SessionExerciseEntity(
     val exerciseId: String,
     val order: Int,
     val note: String? = null,
+    /** Rest used for this exercise in this workout; null = Off. */
+    val restSeconds: Int? = null,
+    /** Exercises sharing a group number are a superset. */
+    val supersetGroup: Int? = null,
 )
