@@ -101,6 +101,7 @@ class CoachContextBuilderTest {
         val logs = names.keys.map { SetLogEntity(0, 1, it, 0, 100f, 5, null, 1_000L) }
         val text = CoachContextBuilder.build(input(training = CoachContextBuilder.trainingSummary(logs, names, ZoneOffset.UTC)))
 
-        assertTrue("context was ${text.length} chars", text.length < 4_000)
+        // Rules + training knowledge are ~5.5k chars; the data part must stay small on top (free-tier token limits).
+        assertTrue("context was ${text.length} chars", text.length < 8_000)
     }
 }

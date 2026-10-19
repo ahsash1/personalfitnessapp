@@ -5,7 +5,11 @@ import com.example.personalfitnessapp.ai.ToolDeclaration
 import com.example.personalfitnessapp.data.local.entity.ExerciseEntity
 import com.example.personalfitnessapp.data.model.Muscle
 import com.example.personalfitnessapp.data.repository.ExerciseRepository
+import com.example.personalfitnessapp.data.repository.WorkoutLogRepository
 import com.example.personalfitnessapp.data.repository.WorkoutSessionRepository
+import com.example.personalfitnessapp.domain.WorkoutFormat
+import com.example.personalfitnessapp.domain.workout.Records
+import com.example.personalfitnessapp.ui.browser.ExerciseFilter
 import com.example.personalfitnessapp.domain.ProposalValidation
 import com.example.personalfitnessapp.domain.RawProposedExercise
 import com.example.personalfitnessapp.domain.RecoveryStatus
@@ -35,6 +39,7 @@ private const val MILLIS_PER_DAY = 24 * 3_600_000L
 class CoachTools @Inject constructor(
     private val exerciseRepository: ExerciseRepository,
     private val sessionRepository: WorkoutSessionRepository,
+    private val workoutLog: WorkoutLogRepository,
     private val contextProvider: CoachContextProvider,
     private val clock: Clock,
 ) : CoachToolExecutor {
@@ -48,6 +53,11 @@ class CoachTools @Inject constructor(
                 "exercise" to ("string" to "Exercise ID or name"),
                 "days" to ("integer" to "How many days back, default $DEFAULT_HISTORY_DAYS, max $MAX_HISTORY_DAYS"),
             ),
+        ),
+        ToolDeclaration(
+            GET_PERSONAL_RECORDS,
+            "All-time bests for one exercise: heaviest weight, best estimated 1RM, best set volume, best weight at each rep count, and the last session's sets.",
+            schema(required = listOf("exercise"), "exercise" to ("string" to "Exercise ID or name")),
         ),
         ToolDeclaration(
             GET_EXERCISE_DETAILS,
@@ -67,6 +77,7 @@ class CoachTools @Inject constructor(
                 required = emptyList(),
                 "muscle" to ("string" to "Primary muscle, one of: ${Muscle.entries.joinToString { it.name }}"),
                 "equipment" to ("string" to "Equipment text to match, e.g. barbell, dumbbell, cable, machine"),
+                "name" to ("string" to "Words from the exercise name in any order, e.g. incline dumbbell press"),
             ),
         ),
         ToolDeclaration(
@@ -85,6 +96,7 @@ class CoachTools @Inject constructor(
     override suspend fun execute(call: ToolCall): ToolOutcome = when (call.name) {
         GET_WORKOUT_HISTORY -> ToolOutcome(workoutHistory(call.arguments))
         GET_EXERCISE_DETAILS -> ToolOutcome(exerciseDetails(call.arguments))
+        GET_PERSONAL_RECORDS -> ToolOutcome(personalRecords(call.arguments))
         GET_RECOVERY_STATUS -> ToolOutcome(recoveryStatus())
         SEARCH_EXERCISES -> ToolOutcome(searchExercises(call.arguments))
         GET_CURRENT_PLAN -> ToolOutcome(currentPlan())
@@ -108,6 +120,28 @@ class CoachTools @Inject constructor(
                 val sorted = group.sortedBy { it.setIndex }.joinToString(", ") { "${formatKg(it.weightKg)}x${it.reps}" }
                 "$date: $sorted"
             }
+    }
+
+    private suspend fun personalRecords(args: JsonObject): String {
+        val query = args.string("exercise")
+        val exercise = findExercise(query)
+            ?: return "No exercise matches \"$query\". Use search_exercises to find it."
+        val sets = workoutLog.allLoggedSets(exercise.id)
+        if (sets.isEmpty()) return "No finished workouts with ${exercise.name} yet."
+        val bests = Records.bests(sets)
+        val byReps = Records.setRecords(sets).joinToString(", ") { (reps, kg) -> "$reps reps: ${WorkoutFormat.weight(kg)} kg" }
+        val lastSession = sets.maxOf { it.sessionStartedAt }
+        val last = sets.filter { it.sessionStartedAt == lastSession }.sortedBy { it.setIndex }
+            .joinToString(", ") { "${WorkoutFormat.weight(it.weightKg)}x${it.reps}" }
+        val lastDate = Instant.ofEpochMilli(lastSession).atZone(clock.zone).toLocalDate()
+        return buildString {
+            appendLine("${exercise.name} (id ${exercise.id}), ${sets.map { it.sessionId }.distinct().size} workouts logged")
+            bests.heaviestKg?.let { appendLine("Heaviest: ${WorkoutFormat.weight(it)} kg") }
+            bests.best1RmKg?.let { appendLine("Best estimated 1RM: ${WorkoutFormat.weight(Math.round(it * 10) / 10.0)} kg") }
+            bests.bestSetVolumeLabel?.let { appendLine("Best set (volume): $it") }
+            if (byReps.isNotEmpty()) appendLine("Best weight per rep count: $byReps")
+            append("Last session ($lastDate): $last")
+        }
     }
 
     private suspend fun exerciseDetails(args: JsonObject): String {
@@ -144,10 +178,13 @@ class CoachTools @Inject constructor(
         } ?: return "Unknown muscle \"$muscleQuery\". Valid values: ${Muscle.entries.joinToString { it.name }}."
         val equipment = args.string("equipment")
 
-        val matches = exerciseRepository.getAll()
+        val name = args.string("name")
+        val all = exerciseRepository.getAll()
             .filter { muscle == null || muscle in it.primaryMuscles }
             .filter { equipment.isBlank() || it.equipment.contains(equipment, ignoreCase = true) }
-            .sortedBy { it.name }
+        // Common gym-floor exercises (the catalog names, which carry the dataset name as an alias) first.
+        val matches = if (name.isNotBlank()) ExerciseFilter.apply(all, name, null, null)
+        else all.sortedWith(compareByDescending<ExerciseEntity> { it.aliases.isNotEmpty() || it.id.startsWith("hevy_") }.thenBy { it.name })
         if (matches.isEmpty()) return "No exercises found for those filters."
 
         val shown = matches.take(MAX_SEARCH_RESULTS)
@@ -186,7 +223,7 @@ class CoachTools @Inject constructor(
         val all = exerciseRepository.getAll()
         return all.firstOrNull { it.id == query }
             ?: all.firstOrNull { it.name.equals(query, ignoreCase = true) }
-            ?: all.filter { it.name.contains(query, ignoreCase = true) }.minByOrNull { it.name.length }
+            ?: ExerciseFilter.apply(all, query, null, null).firstOrNull()
     }
 
     private fun formatKg(kg: Float): String = if (kg % 1f == 0f) kg.toInt().toString() else "%.1f".format(kg)
@@ -237,6 +274,7 @@ class CoachTools @Inject constructor(
     companion object {
         const val GET_WORKOUT_HISTORY = "get_workout_history"
         const val GET_EXERCISE_DETAILS = "get_exercise_details"
+        const val GET_PERSONAL_RECORDS = "get_personal_records"
         const val GET_RECOVERY_STATUS = "get_recovery_status"
         const val SEARCH_EXERCISES = "search_exercises"
         const val GET_CURRENT_PLAN = "get_current_plan"

@@ -85,6 +85,17 @@ class CoachContextProvider @Inject constructor(
             }
             appendLine("- $date ($daysAgo days ago) ${session.title ?: "Workout"}: $perExercise")
         }
+        appendLine()
+        appendLine("HARD SETS PER MUSCLE, LAST 7 DAYS (warm-ups excluded; secondary muscles count half)")
+        val weekSets = sessionRepository.setLogsSince(clock.millis() - 7 * MILLIS_PER_DAY).filter { it.type != SetType.WARMUP }
+        val perMuscle = mutableMapOf<String, Double>()
+        weekSets.forEach { log ->
+            val e = exercisesById[log.exerciseId] ?: return@forEach
+            e.primaryMuscles.forEach { perMuscle[it.displayName] = (perMuscle[it.displayName] ?: 0.0) + 1 }
+            e.secondaryMuscles.forEach { perMuscle[it.displayName] = (perMuscle[it.displayName] ?: 0.0) + 0.5 }
+        }
+        if (perMuscle.isEmpty()) appendLine("- None.")
+        else appendLine(perMuscle.entries.sortedByDescending { it.value }.joinToString(", ") { "${it.key} ${WorkoutFormat.number(it.value)}" })
         val active = workoutLog.active.value ?: return@buildString
         appendLine()
         val minutes = (clock.millis() - active.startedAt) / 60_000
