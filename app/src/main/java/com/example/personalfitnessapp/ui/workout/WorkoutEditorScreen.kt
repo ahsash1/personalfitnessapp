@@ -62,6 +62,9 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.example.personalfitnessapp.data.local.entity.SetType
 import com.example.personalfitnessapp.domain.WorkoutFormat
 import com.example.personalfitnessapp.domain.workout.WorkoutMath
+import com.example.personalfitnessapp.data.model.Muscle
+import com.example.personalfitnessapp.ui.components.BodyMap
+import com.example.personalfitnessapp.ui.components.BodySide
 import com.example.personalfitnessapp.ui.components.HevyDivider
 import com.example.personalfitnessapp.ui.components.HevyTopBar
 import com.example.personalfitnessapp.ui.components.PrimaryButton
@@ -163,6 +166,7 @@ fun ActiveWorkoutScreen(
                             StatColumn("Duration", WorkoutFormat.liveDuration((now - state.startedAt) / 1000), Modifier.weight(1f), valueColor = AppPrimary)
                             StatColumn("Volume", WorkoutFormat.volume(state.volumeKg), Modifier.weight(1f))
                             StatColumn("Sets", state.completedSets.toString(), Modifier.weight(1f))
+                            MiniMuscleMap(state)
                         }
                         HevyDivider()
                     }
@@ -272,6 +276,17 @@ fun EditWorkoutScreen(
     }
     if (confirmCancel) ConfirmDialog("Discard your changes?", "Discard Changes", onClose, { confirmCancel = false })
     if (editGym) GymDialog(state.gym, { viewModel.setGym(it) }, { editGym = false })
+}
+
+/** Front + back silhouettes tinted by the muscles of completed sets (spec §2). */
+@Composable
+fun MiniMuscleMap(state: EditorUiState) {
+    val worked = WorkoutMath.workedMuscles(state.draft) { id -> state.infos[id]?.let { it.primary to it.secondary } ?: (emptyList<Muscle>() to emptyList()) }
+    val color = { muscles: List<Muscle> -> muscles.maxOfOrNull { worked[it] ?: 0f }?.takeIf { it > 0f }?.let { AppPrimary.copy(alpha = 0.35f + 0.65f * it) } }
+    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        BodyMap(BodySide.FRONT, color, Modifier.height(56.dp), outlineColor = androidx.compose.ui.graphics.Color.Transparent)
+        BodyMap(BodySide.BACK, color, Modifier.height(56.dp), outlineColor = androidx.compose.ui.graphics.Color.Transparent)
+    }
 }
 
 @Composable

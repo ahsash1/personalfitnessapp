@@ -4,6 +4,7 @@ import com.example.personalfitnessapp.data.local.entity.ExerciseEntity
 import com.example.personalfitnessapp.data.local.entity.ExperienceLevel
 import com.example.personalfitnessapp.data.local.entity.SetLogEntity
 import com.example.personalfitnessapp.data.model.Muscle
+import kotlin.math.ln
 import kotlin.math.pow
 
 enum class RecoveryStatus { READY, RECOVERING, FATIGUED }
@@ -13,6 +14,10 @@ data class MuscleRecovery(
     val status: RecoveryStatus,
     val fatigueScore: Double,
     val lastTrainedAt: Long?,
+    /** 1.0 = ready; below that, how far fatigue has decayed toward the ready line. */
+    val readyFraction: Double = 1.0,
+    /** Hours until fatigue decays to the ready line (0 when ready). */
+    val hoursUntilReady: Double = 0.0,
 )
 
 /** One completed set, resolved to the exercise it belongs to (for its muscle map). */
@@ -69,7 +74,16 @@ object RecoveryModel {
             else -> RecoveryStatus.READY
         }
 
-        return MuscleRecovery(muscle, status, totalStimulus, lastTrainedAt)
+        // Every set decays with the same half-life, so the total does too.
+        val over = totalStimulus / RecoveryConstants.READY_THRESHOLD
+        return MuscleRecovery(
+            muscle = muscle,
+            status = status,
+            fatigueScore = totalStimulus,
+            lastTrainedAt = lastTrainedAt,
+            readyFraction = if (over <= 1.0) 1.0 else 1.0 / over,
+            hoursUntilReady = if (over <= 1.0) 0.0 else halfLifeHours * ln(over) / ln(2.0),
+        )
     }
 
     /** Raw (non-decayed) set count and volume where [muscle] is a primary target - the

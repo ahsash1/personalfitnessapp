@@ -357,7 +357,10 @@ fun AppNavHost(
                 WeeklyScheduleScreen(onBackClick = { navController.popBackStack() })
             }
             composable(Routes.RECOVERY) {
-                RecoveryScreen(onBackClick = { navController.popBackStack() })
+                RecoveryScreen(
+                    onBackClick = { navController.popBackStack() },
+                    onAskCoach = { navController.navigate(Routes.COACH) },
+                )
             }
             composable(
                 Routes.SWAP,
