@@ -58,6 +58,7 @@ import com.example.personalfitnessapp.domain.RoutineProposal
 @Composable
 fun CoachChatScreen(
     onExerciseClick: (String) -> Unit,
+    onAiConnectionClick: () -> Unit = {},
     viewModel: CoachChatViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -143,6 +144,7 @@ fun CoachChatScreen(
                             message = error.message,
                             onRetry = if (error.retryable) viewModel::retry else null,
                             onDismiss = viewModel::dismissError,
+                            onCheckConnection = onAiConnectionClick,
                         )
                     }
                 }
@@ -258,7 +260,7 @@ private fun ThinkingRow() {
 }
 
 @Composable
-private fun ErrorRow(message: String, onRetry: (() -> Unit)?, onDismiss: () -> Unit) {
+private fun ErrorRow(message: String, onRetry: (() -> Unit)?, onDismiss: () -> Unit, onCheckConnection: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
@@ -267,6 +269,7 @@ private fun ErrorRow(message: String, onRetry: (() -> Unit)?, onDismiss: () -> U
             Text(message, color = MaterialTheme.colorScheme.onErrorContainer)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (onRetry != null) Button(onClick = onRetry) { Text("Retry") }
+                TextButton(onClick = onCheckConnection) { Text("Check AI connection") }
                 TextButton(onClick = onDismiss) { Text("Dismiss") }
             }
         }

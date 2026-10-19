@@ -327,6 +327,7 @@ fun AppNavHost(
             composable(Routes.COACH) {
                 CoachChatScreen(
                     onExerciseClick = { id -> navController.navigate(Routes.exerciseDetail(id)) },
+                    onAiConnectionClick = { navController.navigate(Routes.AI_CONNECTION) },
                 )
             }
             composable(Routes.ROUTINES) {

@@ -43,7 +43,7 @@ class CoachContextBuilderTest {
         val text = CoachContextBuilder.build(input())
 
         assertTrue(text.contains("not a medical professional"))
-        assertTrue(text.contains("Never invent progressive-overload numbers"))
+        assertTrue(text.contains("Never invent numbers when there is no data"))
         assertTrue(text.contains("nothing is saved until they confirm"))
     }
 
