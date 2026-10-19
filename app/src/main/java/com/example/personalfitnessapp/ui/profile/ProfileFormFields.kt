@@ -90,6 +90,19 @@ fun ProfileFormFields(
             modifier = Modifier.fillMaxWidth(),
         )
 
+        Text("Sex (for resting calories)")
+        SingleChoiceSegmentedButtonRow {
+            listOf("male" to "Male", "female" to "Female").forEachIndexed { index, (value, label) ->
+                SegmentedButton(
+                    selected = state.sex?.lowercase() == value,
+                    onClick = { onStateChange(state.copy(sex = value)) },
+                    shape = SegmentedButtonDefaults.itemShape(index, 2),
+                ) {
+                    Text(label)
+                }
+            }
+        }
+
         Text("Experience level")
         SingleChoiceSegmentedButtonRow {
             ExperienceLevel.entries.forEachIndexed { index, level ->

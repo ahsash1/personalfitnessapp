@@ -101,6 +101,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -211,7 +212,17 @@ fun NutritionScreen(viewModel: NutritionViewModel = hiltViewModel()) {
                 }
                 EatenCard(day)
                 BalanceCard(day, justLogged, history, today, date, prefs.goal) { viewModel.showDay(it) }
-                ActivityCard(activity, stats, healthStatus, date == today, onConnect) { viewModel.refresh() }
+                ActivityCard(
+                    activity, stats, healthStatus, date == today, onConnect,
+                    onOpenHealthConnect = {
+                        runCatching { context.startActivity(Intent(if (android.os.Build.VERSION.SDK_INT >= 34) "android.health.connect.action.HEALTH_HOME_SETTINGS" else HealthConnectClient.ACTION_HEALTH_CONNECT_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                            .onFailure { runCatching { context.startActivity(HealthConnectClient.getHealthConnectManageDataIntent(context).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }
+                    },
+                    onOpenSamsungHealth = {
+                        context.packageManager.getLaunchIntentForPackage("com.sec.android.app.shealth")?.let { context.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                            ?: Toast.makeText(context, "Samsung Health isn't installed", Toast.LENGTH_SHORT).show()
+                    },
+                ) { viewModel.refresh() }
                 if (stats == null) Text("Finish your profile (age, height, weight) in Settings so calories can be worked out.", Modifier.padding(16.dp), color = AppDanger)
             }
             MealType.entries.forEach { meal ->
@@ -346,7 +357,16 @@ private fun MacroRing(label: String, value: Double, target: Int?, color: Color) 
 
 /** Steps and active calories from Samsung Health (via Health Connect), or how to connect it. */
 @Composable
-private fun ActivityCard(h: HealthActivity?, stats: BodyStats?, status: HealthStatus, isToday: Boolean, onConnect: () -> Unit, onRefresh: () -> Unit) {
+private fun ActivityCard(
+    h: HealthActivity?,
+    stats: BodyStats?,
+    status: HealthStatus,
+    isToday: Boolean,
+    onConnect: () -> Unit,
+    onOpenHealthConnect: () -> Unit,
+    onOpenSamsungHealth: () -> Unit,
+    onRefresh: () -> Unit,
+) {
     Card {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -372,12 +392,29 @@ private fun ActivityCard(h: HealthActivity?, stats: BodyStats?, status: HealthSt
                     )
                     Text("Also in Samsung Health: Settings → Health Connect → allow Steps and Active calories.", color = AppTextSecondary, fontSize = 12.sp)
                 }
+                h?.stepsAllowed == false -> {
+                    Text("This app isn't allowed to read your steps yet.", color = AppTextSecondary, fontSize = 14.sp)
+                    PrimaryButton("Allow steps", onClick = onConnect, modifier = Modifier.fillMaxWidth())
+                }
+                h?.error != null -> {
+                    Text("Health Connect gave an error: ${h.error}", color = AppDanger, fontSize = 14.sp)
+                    Text("Tap refresh to try again. If it keeps happening, update Health Connect from the Play Store.", color = AppTextSecondary, fontSize = 13.sp)
+                }
                 steps == null && h?.totalActiveKcal == null -> {
+                    // We can read Health Connect but it holds nothing for this day: Samsung Health isn't writing to it.
                     Text(
-                        "Connected, but no steps have come through ${if (isToday) "yet today" else "for this day"}. In Samsung Health open Settings → Health Connect and make sure Steps is allowed, then tap refresh.",
+                        "Samsung Health isn't sharing steps with Health Connect${if (isToday) " yet today" else " for this day"}. Your phone counts them, but they stay inside Samsung Health until sharing is on:",
                         color = AppTextSecondary, fontSize = 14.sp,
                     )
-                    TextButton(onClick = onConnect) { Text("Check permissions", color = AppPrimary) }
+                    Text(
+                        "1. Tap Open Health Connect → App permissions → Samsung Health → turn on Steps and Active calories burned (the \"write\" ones).\n" +
+                            "2. Tap Open Samsung Health so it syncs, then come back and tap refresh ↻.",
+                        color = AppTextPrimary, fontSize = 14.sp,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SecondaryButton("Open Health Connect", onClick = onOpenHealthConnect, modifier = Modifier.weight(1f))
+                        SecondaryButton("Open Samsung Health", onClick = onOpenSamsungHealth, modifier = Modifier.weight(1f))
+                    }
                 }
                 else -> {
                     val count = steps ?: 0L
