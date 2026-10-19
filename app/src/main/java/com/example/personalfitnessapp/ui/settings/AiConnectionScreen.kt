@@ -96,7 +96,7 @@ fun AiConnectionScreen(onBackClick: () -> Unit, viewModel: AiConnectionViewModel
             if (state.routes.isEmpty()) {
                 item {
                     Text(
-                        "No AI keys found. Add GEMINI_API_KEY (and optionally GROQ_API_KEY) to local.properties and rebuild.",
+                        "No AI keys found. Add GEMINI_API_KEY (and optionally GROQ_API_KEY / OPENROUTER_API_KEY) to local.properties and rebuild.",
                         Modifier.padding(16.dp),
                         color = AppDanger,
                     )
@@ -106,11 +106,18 @@ fun AiConnectionScreen(onBackClick: () -> Unit, viewModel: AiConnectionViewModel
                 ModelRow(route, state.results[route.id], route.id in state.running)
                 HevyDivider(Modifier.padding(start = 16.dp))
             }
-            if (AiProvider.GROQ in state.missingProviders) {
+            val tips = buildList {
+                if (AiProvider.GROQ in state.missingProviders) {
+                    add("A free Groq key (console.groq.com, no card needed) adds three backup models: GROQ_API_KEY=...")
+                }
+                if (AiProvider.OPENROUTER in state.missingProviders) {
+                    add("A free OpenRouter key (openrouter.ai/keys) adds four more: OPENROUTER_API_KEY=...")
+                }
+            }
+            if (tips.isNotEmpty()) {
                 item {
                     Text(
-                        "Tip: a free Groq key (console.groq.com, no card needed) adds three backup models. " +
-                            "Put GROQ_API_KEY=... in local.properties next to your Gemini key and rebuild.",
+                        "Tip: " + tips.joinToString("\n") + "\nPut them in local.properties next to your Gemini key and rebuild.",
                         Modifier.padding(16.dp),
                         color = AppTextSecondary,
                         fontSize = 15.sp,

@@ -39,10 +39,10 @@ class AiBackendHealth @Inject constructor() {
     @Synchronized
     fun recordFailure(route: ModelRoute, failure: BackendFailure, now: Long) {
         lastFailure[route.id] = failure
-        if (failure.kind == FailureKind.AUTH) {
-            providerBlockedUntil[route.provider] = now + AiModelConfig.COOLDOWN_AUTH_MILLIS
-        }
         val cooldown = cooldownFor(failure)
+        if (failure.kind == FailureKind.AUTH || failure.providerWide) {
+            providerBlockedUntil[route.provider] = now + cooldown
+        }
         if (cooldown > 0) cooldownUntil[route.id] = now + cooldown
         if (lastSuccessRouteId == route.id) lastSuccessRouteId = null
     }

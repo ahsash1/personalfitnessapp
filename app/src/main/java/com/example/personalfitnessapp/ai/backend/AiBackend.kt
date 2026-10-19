@@ -5,7 +5,7 @@ import com.example.personalfitnessapp.ai.ToolDeclaration
 import com.example.personalfitnessapp.ai.ToolResult
 import kotlinx.serialization.json.JsonObject
 
-enum class AiProvider(val displayName: String) { GEMINI("Gemini"), GROQ("Groq") }
+enum class AiProvider(val displayName: String) { GEMINI("Gemini"), GROQ("Groq"), OPENROUTER("OpenRouter") }
 
 /** One provider + model pairing the app can send a request to. */
 data class ModelRoute(val provider: AiProvider, val model: String) {
@@ -39,6 +39,8 @@ data class BackendFailure(
     val kind: FailureKind,
     val detail: String,
     val retryAfterMillis: Long? = null,
+    /** The limit is account-wide (e.g. OpenRouter's daily free cap), so every model of the provider is benched. */
+    val providerWide: Boolean = false,
 )
 
 sealed interface BackendResult<out T> {

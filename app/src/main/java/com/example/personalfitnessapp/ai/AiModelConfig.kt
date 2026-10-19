@@ -17,11 +17,18 @@ import com.example.personalfitnessapp.ai.backend.ModelRoute
  * - console.groq.com/docs: free plan (no card) serves openai/gpt-oss-120b, openai/gpt-oss-20b
  *   and qwen/qwen3.8-27b, all with tool calling, at 30 RPM / 1K RPD / 8K TPM each.
  *
- * Quotas are per model, so walking a chain of models multiplies the free capacity.
+ * - openrouter.ai/api/v1/models (fetched 2026-10-19): 20 ":free" models; picked the larger ones
+ *   that list "tools" in supported_parameters, plus openrouter/free, which routes to any
+ *   free model. Docs (api_reference/limits): free models allow 20 RPM and 50 requests/day per
+ *   account (1000/day once $10 of credit has ever been bought), shared across all free models.
+ *
+ * Gemini and Groq quotas are per model, so walking a chain of models multiplies the free
+ * capacity; OpenRouter's daily cap is account-wide, so its models sit behind the others.
  */
 object AiModelConfig {
     const val GEMINI_INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
     const val GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
+    const val OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 
     /**
      * Tried in order for every request, skipping models in cooldown and putting the last
@@ -32,10 +39,14 @@ object AiModelConfig {
         ModelRoute(AiProvider.GEMINI, "gemini-3.8-flash"),
         ModelRoute(AiProvider.GEMINI, "gemini-3.5-flash-lite"),
         ModelRoute(AiProvider.GROQ, "openai/gpt-oss-120b"),
+        ModelRoute(AiProvider.OPENROUTER, "nvidia/nemotron-3-ultra-550b-a55b:free"),
         ModelRoute(AiProvider.GEMINI, "gemini-3.6-flash"),
+        ModelRoute(AiProvider.OPENROUTER, "google/gemma-4-31b-it:free"),
         ModelRoute(AiProvider.GEMINI, "gemini-3.1-flash-lite"),
         ModelRoute(AiProvider.GROQ, "qwen/qwen3.8-27b"),
+        ModelRoute(AiProvider.OPENROUTER, "minimax/minimax-m3.1-flash:free"),
         ModelRoute(AiProvider.GROQ, "openai/gpt-oss-20b"),
+        ModelRoute(AiProvider.OPENROUTER, "openrouter/free"),
     )
 
     const val CONNECT_TIMEOUT_SECONDS = 10L

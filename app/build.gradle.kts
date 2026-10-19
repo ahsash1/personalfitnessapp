@@ -23,6 +23,7 @@ val geminiApiKey: String = localProperties.getProperty("GEMINI_API_KEY")
 // Optional backup AI provider (free Groq key, console.groq.com). Without it the app
 // simply has fewer models to fall back on.
 val groqApiKey: String = localProperties.getProperty("GROQ_API_KEY").orEmpty()
+val openRouterApiKey: String = localProperties.getProperty("OPENROUTER_API_KEY").orEmpty()
 
 android {
     namespace = "com.example.personalfitnessapp"
@@ -41,6 +42,7 @@ android {
 
         buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
         buildConfigField("String", "GROQ_API_KEY", "\"$groqApiKey\"")
+        buildConfigField("String", "OPENROUTER_API_KEY", "\"$openRouterApiKey\"")
     }
 
     buildTypes {

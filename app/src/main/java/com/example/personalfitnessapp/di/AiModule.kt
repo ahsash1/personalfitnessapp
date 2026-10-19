@@ -9,7 +9,7 @@ import com.example.personalfitnessapp.ai.Sleeper
 import com.example.personalfitnessapp.ai.backend.AiHttp
 import com.example.personalfitnessapp.ai.backend.AiProvider
 import com.example.personalfitnessapp.ai.backend.GeminiBackend
-import com.example.personalfitnessapp.ai.backend.GroqBackend
+import com.example.personalfitnessapp.ai.backend.OpenAiChatBackend
 import com.example.personalfitnessapp.ai.coach.CoachToolExecutor
 import com.example.personalfitnessapp.ai.coach.CoachTools
 import dagger.Binds
@@ -40,7 +40,9 @@ abstract class AiModule {
                     AiProvider.GEMINI -> BuildConfig.GEMINI_API_KEY.takeIf { it.isNotBlank() }
                         ?.let { GeminiBackend(route.model, it, http) }
                     AiProvider.GROQ -> BuildConfig.GROQ_API_KEY.takeIf { it.isNotBlank() }
-                        ?.let { GroqBackend(route.model, it, http) }
+                        ?.let { OpenAiChatBackend(route, it, http) }
+                    AiProvider.OPENROUTER -> BuildConfig.OPENROUTER_API_KEY.takeIf { it.isNotBlank() }
+                        ?.let { OpenAiChatBackend(route, it, http) }
                 }
             }
         )

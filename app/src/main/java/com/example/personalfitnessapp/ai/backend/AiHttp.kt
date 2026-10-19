@@ -128,4 +128,4 @@ private fun findRetryDelay(element: JsonElement): Long? = when (element) {
 
 /** Daily quotas reset at midnight Pacific, so a per-day 429 deserves a long cooldown. */
 fun looksLikeDailyQuota(body: String): Boolean =
-    Regex("per[ _]?day|daily|\\bRPD\\b|\\bTPD\\b", RegexOption.IGNORE_CASE).containsMatchIn(body)
+    Regex("per[ _-]?day|daily|\\bRPD\\b|\\bTPD\\b", RegexOption.IGNORE_CASE).containsMatchIn(body)

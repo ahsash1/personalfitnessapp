@@ -130,7 +130,7 @@ class GroqBackendTest {
             ),
             okJson("""{"choices":[{"message":{"role":"assistant","content":"Rest your legs."},"finish_reason":"stop"}]}"""),
         )
-        val conversation = GroqBackend("openai/gpt-oss-120b", "gsk-key", poster).newConversation("Coach.", listOf(recoveryTool))
+        val conversation = OpenAiChatBackend(ModelRoute(AiProvider.GROQ, "openai/gpt-oss-120b"), "gsk-key", poster).newConversation("Coach.", listOf(recoveryTool))
 
         val first = conversation.start("Legs today?") as BackendResult.Ok
         val call = first.value.toolCalls.single()
@@ -160,7 +160,7 @@ class GroqBackendTest {
             okJson("""{"choices":[{"message":{"role":"assistant","content":"OK"}}]}"""),
         )
         val waited = mutableListOf<Long>()
-        val result = GroqBackend("m", "k", poster, sleep = { waited += it }).newConversation("s", emptyList()).start("Ping")
+        val result = OpenAiChatBackend(ModelRoute(AiProvider.GROQ, "m"), "k", poster, sleep = { waited += it }).newConversation("s", emptyList()).start("Ping")
 
         assertTrue(result is BackendResult.Ok)
         assertEquals(listOf(2_000L), waited)
@@ -169,7 +169,7 @@ class GroqBackendTest {
     @Test
     fun `a long 429 is reported so the next model is tried`() = runTest {
         val poster = FakePoster(httpError(429, retryAfter = "40"))
-        val result = GroqBackend("m", "k", poster, sleep = { error("should not wait") })
+        val result = OpenAiChatBackend(ModelRoute(AiProvider.GROQ, "m"), "k", poster, sleep = { error("should not wait") })
             .newConversation("s", emptyList()).start("Ping")
 
         val failure = (result as BackendResult.Err).failure
@@ -194,7 +194,7 @@ class GroqBackendTest {
     @Test
     fun `json mode includes the schema in the prompt and rejects images`() = runTest {
         val poster = FakePoster(okJson("""{"choices":[{"message":{"role":"assistant","content":"{\"a\":1}"}}]}"""))
-        val backend = GroqBackend("m", "k", poster)
+        val backend = OpenAiChatBackend(ModelRoute(AiProvider.GROQ, "m"), "k", poster)
         val schema = buildJsonObject { put("type", "object") }
 
         val ok = backend.generateJson("Give cues", schema) as BackendResult.Ok
@@ -204,5 +204,47 @@ class GroqBackendTest {
         assertTrue((body["messages"]!!.jsonArray[0].jsonObject["content"] as JsonPrimitive).content.contains("\"type\":\"object\""))
 
         assertTrue(backend.generateJson("x", schema, ByteArray(1)) is BackendResult.Err)
+    }
+}
+
+class OpenRouterBackendTest {
+    private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+
+    private fun poster(vararg outcomes: HttpOutcome) = object : JsonPoster {
+        val urls = mutableListOf<String>()
+        val queue = outcomes.toMutableList()
+        override val json = this@OpenRouterBackendTest.json
+        override suspend fun postJson(url: String, headers: Map<String, String>, body: kotlinx.serialization.json.JsonObject): HttpOutcome {
+            urls += url
+            return queue.removeAt(0)
+        }
+    }
+
+    @Test
+    fun `posts to OpenRouter and reads an OpenAI-style answer`() = kotlinx.coroutines.test.runTest {
+        val p = poster(HttpOutcome.Ok(json.parseToJsonElement("""{"choices":[{"message":{"role":"assistant","content":"Hi"}}]}""") as kotlinx.serialization.json.JsonObject))
+        val result = OpenAiChatBackend(ModelRoute(AiProvider.OPENROUTER, "x:free"), "k", p).newConversation("s", emptyList()).start("u")
+        assertEquals("Hi", (result as BackendResult.Ok).value.text)
+        assertEquals(com.example.personalfitnessapp.ai.AiModelConfig.OPENROUTER_CHAT_URL, p.urls.single())
+    }
+
+    @Test
+    fun `an error inside a 200 body is a failure, not an answer`() = kotlinx.coroutines.test.runTest {
+        val p = poster(HttpOutcome.Ok(json.parseToJsonElement("""{"error":{"code":502,"message":"Provider returned error"}}""") as kotlinx.serialization.json.JsonObject))
+        val result = OpenAiChatBackend(ModelRoute(AiProvider.OPENROUTER, "x:free"), "k", p).newConversation("s", emptyList()).start("u")
+        assertEquals(FailureKind.OVERLOADED, (result as BackendResult.Err).failure.kind)
+    }
+
+    @Test
+    fun `daily free cap and missing credit bench the whole provider`() {
+        val p = poster()
+        val daily = classifyOpenRouterError(HttpError(429, """{"error":{"code":429,"message":"Rate limit exceeded: free-models-per-day"}}""", null), p)
+        assertEquals(FailureKind.RATE_LIMITED, daily.kind)
+        assertTrue(daily.providerWide)
+        assertTrue(classifyOpenRouterError(HttpError(402, "{}", null), p).providerWide)
+        val minute = classifyOpenRouterError(HttpError(429, """{"error":{"code":429,"message":"Rate limit exceeded: free-models-per-min"}}""", "7"), p)
+        assertFalse(minute.providerWide)
+        assertEquals(FailureKind.AUTH, classifyOpenRouterError(HttpError(401, "{}", null), p).kind)
+        assertEquals(FailureKind.MODEL_UNAVAILABLE, classifyOpenRouterError(HttpError(404, "{}", null), p).kind)
     }
 }

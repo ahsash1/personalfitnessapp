@@ -250,8 +250,9 @@ class ResilientAiService @Inject constructor(
 
     private fun failureFor(failures: List<Pair<AiBackend, BackendFailure>>): AiResult.Failure {
         val kinds = failures.map { it.second.kind }.toSet()
-        val noGroq = backends.all.none { it.route.provider == AiProvider.GROQ }
-        val backupHint = if (noGroq) " Adding a free GROQ_API_KEY to local.properties gives the coach a backup." else ""
+        val missing = listOf(AiProvider.GROQ to "GROQ_API_KEY", AiProvider.OPENROUTER to "OPENROUTER_API_KEY")
+            .filter { (provider, _) -> backends.all.none { it.route.provider == provider } }.map { it.second }
+        val backupHint = if (missing.isEmpty()) "" else " Adding a free ${missing.joinToString(" or ")} to local.properties gives the coach backups."
         return when {
             kinds.isEmpty() -> AiResult.Failure(
                 "The AI key was rejected recently. Check the keys in local.properties, then try again in a few minutes.",

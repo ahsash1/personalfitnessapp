@@ -18,18 +18,28 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 
 /**
- * Groq's OpenAI-compatible chat completions (console.groq.com/docs/tool-use). Stateless:
- * the whole message list, including the assistant's tool_calls and each tool result, is
- * resent every round.
+ * OpenAI-compatible chat completions, used for Groq (console.groq.com/docs/tool-use) and
+ * OpenRouter (openrouter.ai/docs/api_reference). Stateless: the whole message list, including
+ * the assistant's tool_calls and each tool result, is resent every round.
  */
-class GroqBackend(
-    model: String,
+class OpenAiChatBackend(
+    override val route: ModelRoute,
     private val apiKey: String,
     private val http: JsonPoster,
     private val sleep: suspend (Long) -> Unit = { delay(it) },
 ) : AiBackend {
-    override val route = ModelRoute(AiProvider.GROQ, model)
+    init {
+        require(route.provider == AiProvider.GROQ || route.provider == AiProvider.OPENROUTER) { "Not an OpenAI-style provider: ${route.provider}" }
+    }
+
     override val supportsImages = false
+
+    private val url = if (route.provider == AiProvider.GROQ) AiModelConfig.GROQ_CHAT_URL else AiModelConfig.OPENROUTER_CHAT_URL
+    private val headers = buildMap {
+        put("Authorization", "Bearer $apiKey")
+        // OpenRouter's optional app attribution header.
+        if (route.provider == AiProvider.OPENROUTER) put("X-Title", "Personal Fitness")
+    }
 
     override fun newConversation(systemInstruction: String, tools: List<ToolDeclaration>): BackendConversation =
         Conversation(systemInstruction, tools)
@@ -108,7 +118,8 @@ class GroqBackend(
         val body = buildJsonObject {
             put("model", route.model)
             putJsonArray("messages") { add(message("user", instruction)) }
-            putJsonObject("response_format") { put("type", "json_object") }
+            // Not every free OpenRouter model supports response_format; the prompt asks for JSON anyway.
+            if (route.provider == AiProvider.GROQ) putJsonObject("response_format") { put("type", "json_object") }
         }
         return when (val outcome = postWithShortRetry(body)) {
             is BackendResult.Err -> outcome
@@ -121,7 +132,7 @@ class GroqBackend(
     }
 
     /**
-     * Groq's free plan is 30 requests/min, so a 429 usually clears in seconds; waiting once
+     * Groq's free plan is 30 requests/min (OpenRouter's free models 20), so a 429 usually clears in seconds; waiting once
      * for a short retry-after is cheaper than restarting the exchange on another model.
      */
     private suspend fun postWithShortRetry(body: JsonObject): BackendResult<JsonObject> {
@@ -137,10 +148,17 @@ class GroqBackend(
     }
 
     private suspend fun post(body: JsonObject): BackendResult<JsonObject> =
-        when (val outcome = http.postJson(AiModelConfig.GROQ_CHAT_URL, mapOf("Authorization" to "Bearer $apiKey"), body)) {
-            is HttpOutcome.Ok -> BackendResult.Ok(outcome.json)
+        when (val outcome = http.postJson(url, headers, body)) {
+            // OpenRouter reports errors that happen after the model started as HTTP 200 with an error body.
+            is HttpOutcome.Ok -> (outcome.json["error"] as? JsonObject)?.let { error ->
+                val code = (error["code"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 502
+                BackendResult.Err(classifyOpenRouterError(HttpError(code, outcome.json.toString(), null), http))
+            } ?: BackendResult.Ok(outcome.json)
             is HttpOutcome.Failed -> BackendResult.Err(outcome.failure)
-            is HttpOutcome.Error -> BackendResult.Err(classifyGroqError(outcome.error, http))
+            is HttpOutcome.Error -> BackendResult.Err(
+                if (route.provider == AiProvider.GROQ) classifyGroqError(outcome.error, http)
+                else classifyOpenRouterError(outcome.error, http)
+            )
         }
 }
 
@@ -197,5 +215,31 @@ internal fun classifyGroqError(error: HttpError, http: JsonPoster): BackendFailu
         } else {
             BackendFailure(FailureKind.BAD_REQUEST, detail)
         }
+    }
+}
+
+/**
+ * openrouter.ai/docs/api_reference/errors-and-debugging. Free models: 20 requests/min and a
+ * per-day cap shared by every free model on the account (50, or 1000 after buying credits), so
+ * hitting the daily cap or a 402 benches the whole provider rather than one model.
+ */
+internal fun classifyOpenRouterError(error: HttpError, http: JsonPoster): BackendFailure {
+    val detail = "HTTP ${error.code}"
+    return when (error.code) {
+        401 -> BackendFailure(FailureKind.AUTH, detail)
+        402 -> BackendFailure(FailureKind.RATE_LIMITED, "$detail (no credit)", AiModelConfig.COOLDOWN_DAILY_QUOTA_MILLIS, providerWide = true)
+        403 -> BackendFailure(FailureKind.BAD_REQUEST, "$detail (blocked or moderated)")
+        404 -> BackendFailure(FailureKind.MODEL_UNAVAILABLE, detail)
+        408 -> BackendFailure(FailureKind.TIMEOUT, detail)
+        429 -> if (looksLikeDailyQuota(error.body)) {
+            BackendFailure(FailureKind.RATE_LIMITED, "$detail (daily quota)", AiModelConfig.COOLDOWN_DAILY_QUOTA_MILLIS, providerWide = true)
+        } else {
+            BackendFailure(FailureKind.RATE_LIMITED, detail, retryAfterMillis(error, http.json))
+        }
+        400 -> BackendFailure(
+            if (error.body.contains("tool", ignoreCase = true)) FailureKind.BAD_RESPONSE else FailureKind.BAD_REQUEST,
+            detail,
+        )
+        else -> if (error.code >= 500) BackendFailure(FailureKind.OVERLOADED, detail) else BackendFailure(FailureKind.BAD_REQUEST, detail)
     }
 }
