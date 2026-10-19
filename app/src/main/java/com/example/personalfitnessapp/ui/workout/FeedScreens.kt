@@ -39,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -225,6 +226,7 @@ internal fun FeedCard(s: WorkoutSummary, name: String, now: Long, onClick: () ->
             StatColumn("Volume", WorkoutFormat.volume(s.volumeKg), Modifier.width(110.dp))
             if (s.records > 0) StatColumn("Records", s.records.toString(), Modifier.width(90.dp), valueColor = AppGold)
         }
+        if (s.media.isNotEmpty()) PhotoStrip(s.media)
         HevyDivider(Modifier.padding(vertical = 4.dp))
         s.exercises.take(3).forEach { ex ->
             Row(Modifier.fillMaxWidth().clickable { onExerciseClick(ex.exerciseId) }.padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -278,6 +280,7 @@ fun WorkoutDetailScreen(
                         StatColumn("Records", s.records.toString(), Modifier.weight(1f), valueColor = if (s.records > 0) AppGold else AppTextPrimary)
                     }
                 }
+                if (s.media.isNotEmpty()) PhotoStrip(s.media)
                 SectionStrip()
                 Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("Workout", Modifier.weight(1f), color = AppTextSecondary, fontSize = 15.sp)
@@ -333,5 +336,22 @@ private fun DetailExercise(ex: SummaryExercise, onExerciseClick: (String) -> Uni
             }
         }
         if (ex.sets.any { it.type == SetType.WARMUP }) Spacer(Modifier.height(4.dp))
+    }
+}
+
+@Composable
+private fun PhotoStrip(media: List<String>) {
+    androidx.compose.foundation.lazy.LazyRow(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+    ) {
+        items(media) { uri ->
+            coil3.compose.AsyncImage(
+                model = uri,
+                contentDescription = "Workout photo",
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.size(if (media.size == 1) 300.dp else 180.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)),
+            )
+        }
     }
 }

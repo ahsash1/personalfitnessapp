@@ -23,12 +23,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.FitnessCenter
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -117,6 +119,8 @@ fun ActiveWorkoutScreen(
     val now = rememberNow()
     var confirmDiscard by remember { mutableStateOf(false) }
     var finishPrompt by remember { mutableStateOf<FinishCheck?>(null) }
+    val clock = remember { ClockState() }
+    var showClock by remember { mutableStateOf(false) }
 
     val view = LocalView.current
     DisposableEffect(prefs.keepAwake) {
@@ -136,6 +140,7 @@ fun ActiveWorkoutScreen(
                         IconButton(onClick = onMinimize) { Icon(Icons.Outlined.KeyboardArrowDown, "Minimize", tint = AppTextPrimary) }
                     },
                     actions = {
+                        IconButton(onClick = { showClock = true }) { Icon(Icons.Outlined.Timer, "Clock", tint = AppTextPrimary) }
                         IconButton(onClick = onCoach) { Icon(Icons.Outlined.AutoAwesome, "Ask the coach", tint = AppPrimary) }
                         PrimaryButton("Finish", onClick = {
                             when (val check = viewModel.finishCheck()) {
@@ -198,6 +203,7 @@ fun ActiveWorkoutScreen(
     if (confirmDiscard) {
         ConfirmDialog("Are you sure you want to discard this workout?", "Discard Workout", { viewModel.discard(onDiscarded) }, { confirmDiscard = false })
     }
+    if (showClock) ClockSheet(clock) { showClock = false }
     when (finishPrompt) {
         FinishCheck.NOTHING_DONE -> AlertDialog(
             onDismissRequest = { finishPrompt = null },
@@ -266,6 +272,9 @@ fun EditWorkoutScreen(
                         gym = state.gym,
                         onGymClick = { editGym = true },
                         showClear = true,
+                        media = state.media,
+                        onMediaChange = viewModel::setMedia,
+                        onDateChange = viewModel::setStart,
                     )
                     SectionStrip()
                 }
@@ -310,7 +319,11 @@ fun WorkoutMetaHeader(
     gym: String?,
     onGymClick: () -> Unit,
     showClear: Boolean,
+    media: List<String> = emptyList(),
+    onMediaChange: ((List<String>) -> Unit)? = null,
+    onDateChange: ((Long) -> Unit)? = null,
 ) {
+    var pickDate by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             BasicTextField(
@@ -339,6 +352,7 @@ fun WorkoutMetaHeader(
             StatColumn("Sets", sets.toString(), Modifier.weight(1f))
         }
         HevyDivider(Modifier.padding(top = 8.dp))
+        if (onMediaChange != null) MediaPicker(media, onMediaChange)
         Column(Modifier.padding(16.dp)) {
             Text("Description", color = AppTextSecondary, fontSize = 14.sp)
             Spacer(Modifier.height(6.dp))
@@ -357,10 +371,83 @@ fun WorkoutMetaHeader(
             )
         }
         HevyDivider()
-        MetaRow(Icons.Outlined.CalendarMonth, "Date", WorkoutFormat.dateTime(Instant.ofEpochMilli(startedAt), ZoneId.systemDefault()), null)
+        MetaRow(Icons.Outlined.CalendarMonth, "Date", WorkoutFormat.dateTime(Instant.ofEpochMilli(startedAt), ZoneId.systemDefault()), onDateChange?.let { { pickDate = true } })
         HevyDivider(Modifier.padding(start = 56.dp))
         MetaRow(Icons.Outlined.LocationOn, "Gym", gym ?: "Select", onGymClick)
         HevyDivider()
+    }
+    if (pickDate && onDateChange != null) DateTimePicker(startedAt, { pickDate = false }, onDateChange)
+}
+
+/** Dashed "Add a photo / video" box, then thumbnails (tap one to remove it). */
+@Composable
+fun MediaPicker(media: List<String>, onChange: (List<String>) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val picker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.PickMultipleVisualMedia(6),
+    ) { uris ->
+        // Keep read access after restarts; the photo stays in the gallery, we only store its uri.
+        uris.forEach { uri ->
+            runCatching { context.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+        }
+        if (uris.isNotEmpty()) onChange((media + uris.map { it.toString() }).distinct())
+    }
+    val launch = {
+        picker.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+    }
+    androidx.compose.foundation.lazy.LazyRow(
+        Modifier.fillMaxWidth().padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        item {
+            com.example.personalfitnessapp.ui.components.OutlinedCell(Modifier.size(width = if (media.isEmpty()) 340.dp else 110.dp, height = 110.dp).clickable { launch() }) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Outlined.AddPhotoAlternate, null, tint = AppTextSecondary)
+                    if (media.isEmpty()) Text("Add a photo / video", color = AppTextSecondary, fontSize = 15.sp)
+                }
+            }
+        }
+        items(media) { uri ->
+            coil3.compose.AsyncImage(
+                model = uri,
+                contentDescription = "Workout photo, tap to remove",
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.size(110.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp)).clickable { onChange(media - uri) },
+            )
+        }
+    }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun DateTimePicker(initial: Long, onDismiss: () -> Unit, onPicked: (Long) -> Unit) {
+    val zone = ZoneId.systemDefault()
+    val start = Instant.ofEpochMilli(initial).atZone(zone)
+    var step by remember { mutableStateOf(0) }
+    val dateState = androidx.compose.material3.rememberDatePickerState(
+        initialSelectedDateMillis = start.toLocalDate().atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(),
+    )
+    val timeState = androidx.compose.material3.rememberTimePickerState(start.hour, start.minute, is24Hour = false)
+    if (step == 0) {
+        androidx.compose.material3.DatePickerDialog(
+            onDismissRequest = onDismiss,
+            confirmButton = { TextButton(onClick = { step = 1 }) { Text("Next", color = AppPrimary) } },
+            dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = AppTextSecondary) } },
+        ) { androidx.compose.material3.DatePicker(dateState) }
+    } else {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            containerColor = AppSurface,
+            text = { androidx.compose.material3.TimePicker(timeState) },
+            confirmButton = {
+                TextButton(onClick = {
+                    val day = java.time.Instant.ofEpochMilli(dateState.selectedDateMillis ?: initial).atZone(java.time.ZoneOffset.UTC).toLocalDate()
+                    onPicked(day.atTime(timeState.hour, timeState.minute).atZone(zone).toInstant().toEpochMilli())
+                    onDismiss()
+                }) { Text("Save", color = AppPrimary) }
+            },
+            dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = AppTextSecondary) } },
+        )
     }
 }
 

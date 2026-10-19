@@ -71,6 +71,7 @@ data class EditorUiState(
     val title: String = "",
     val description: String = "",
     val gym: String? = null,
+    val media: List<String> = emptyList(),
     val dirty: Boolean = false,
     val saving: Boolean = false,
 ) {
@@ -150,6 +151,7 @@ class WorkoutEditorViewModel @Inject constructor(
                         title = session.title ?: WorkoutFormat.autoTitle(Instant.ofEpochMilli(session.startedAt), ZoneId.systemDefault()),
                         description = session.notes,
                         gym = session.gym,
+                        media = session.mediaUris.orEmpty(),
                     )
                 }
                 loadInfo(draft)
@@ -323,6 +325,10 @@ class WorkoutEditorViewModel @Inject constructor(
     fun setTitle(v: String) = _state.update { it.copy(title = v, dirty = true) }
     fun setDescription(v: String) = _state.update { it.copy(description = v, dirty = true) }
     fun setGym(v: String?) = _state.update { it.copy(gym = v?.ifBlank { null }, dirty = true) }
+    fun setMedia(v: List<String>) = _state.update { it.copy(media = v, dirty = true) }
+
+    /** Moving the start keeps the workout's duration. */
+    fun setStart(millis: Long) = _state.update { it.copy(startedAt = millis, endedAt = millis + (it.endedAt - it.startedAt), dirty = true) }
 
     fun saveEdits(onDone: () -> Unit) {
         val s = _state.value
@@ -330,7 +336,7 @@ class WorkoutEditorViewModel @Inject constructor(
         _state.update { it.copy(saving = true) }
         viewModelScope.launch {
             val title = s.title.ifBlank { WorkoutFormat.autoTitle(Instant.ofEpochMilli(s.startedAt), ZoneId.systemDefault()) }
-            log.save(s.sessionId, WorkoutMeta(title, s.description, s.startedAt, s.endedAt, s.gym, emptyList()), s.draft, s.routineId)
+            log.save(s.sessionId, WorkoutMeta(title, s.description, s.startedAt, s.endedAt, s.gym, s.media), s.draft, s.routineId)
             onDone()
         }
     }

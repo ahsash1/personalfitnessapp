@@ -87,6 +87,7 @@ data class SaveForm(
     val title: String = "",
     val description: String = "",
     val gym: String? = null,
+    val media: List<String> = emptyList(),
     val types: Map<String, ExerciseType> = emptyMap(),
     val saving: Boolean = false,
 )
@@ -113,6 +114,7 @@ class SaveWorkoutViewModel @Inject constructor(
     fun setTitle(v: String) = _form.update { it.copy(title = v) }
     fun setDescription(v: String) = _form.update { it.copy(description = v) }
     fun setGym(v: String?) = _form.update { it.copy(gym = v?.ifBlank { null }) }
+    fun setMedia(v: List<String>) = _form.update { it.copy(media = v) }
 
     fun save(onSaved: (Long) -> Unit) {
         val active = log.active.value ?: return
@@ -121,7 +123,7 @@ class SaveWorkoutViewModel @Inject constructor(
         viewModelScope.launch {
             val f = _form.value
             val title = f.title.ifBlank { WorkoutFormat.autoTitle(Instant.ofEpochMilli(active.startedAt), ZoneId.systemDefault()) }
-            val id = log.finish(WorkoutMeta(title, f.description, active.startedAt, clock.millis(), f.gym, emptyList()), active.draft)
+            val id = log.finish(WorkoutMeta(title, f.description, active.startedAt, clock.millis(), f.gym, f.media), active.draft)
             restTimer.skip()
             onSaved(id)
         }
@@ -170,6 +172,8 @@ fun SaveWorkoutScreen(
                 gym = form.gym,
                 onGymClick = { editGym = true },
                 showClear = false,
+                media = form.media,
+                onMediaChange = viewModel::setMedia,
             )
             Spacer(Modifier.height(24.dp))
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {

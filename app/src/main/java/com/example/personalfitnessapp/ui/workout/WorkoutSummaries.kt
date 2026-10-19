@@ -44,6 +44,7 @@ data class WorkoutSummary(
     val setCount: Int,
     val records: Int,
     val exercises: List<SummaryExercise>,
+    val media: List<String> = emptyList(),
 )
 
 object Summaries {
@@ -83,6 +84,7 @@ object Summaries {
             setCount = sets.size,
             records = sets.sumOf { Records.decode(it.prBadges).size },
             exercises = exercises,
+            media = session.mediaUris.orEmpty(),
         )
     }
 

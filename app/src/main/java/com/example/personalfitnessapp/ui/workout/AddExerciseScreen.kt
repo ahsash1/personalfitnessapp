@@ -90,7 +90,7 @@ data class PickerUi(
 @HiltViewModel
 class AddExerciseViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    exercises: ExerciseRepository,
+    private val exercises: ExerciseRepository,
     private val log: WorkoutLogRepository,
 ) : ViewModel() {
     val single: Boolean = savedStateHandle.get<String>("single") == "true"
@@ -114,6 +114,24 @@ class AddExerciseViewModel @Inject constructor(
     fun setQuery(q: String) = filters.update { it.copy(query = q) }
     fun setEquipment(e: String?) = filters.update { it.copy(equipment = e) }
     fun setMuscle(m: Muscle?) = filters.update { it.copy(muscle = m) }
+    /** A user exercise; it shows up in search, history and the coach like any other. */
+    fun create(name: String, equipment: String, primary: Muscle?, type: com.example.personalfitnessapp.data.local.entity.ExerciseType) = viewModelScope.launch {
+        val id = "custom_" + java.util.UUID.randomUUID().toString().take(8)
+        exercises.insert(
+            ExerciseEntity(
+                id = id, name = name.trim(), aliases = emptyList(),
+                primaryMuscles = listOfNotNull(primary), secondaryMuscles = emptyList(),
+                equipment = equipment, movementPattern = "", mechanic = null,
+                level = com.example.personalfitnessapp.data.local.entity.ExerciseLevel.INTERMEDIATE,
+                setupSteps = emptyList(), executionSteps = emptyList(), formCues = emptyList(), commonMistakes = emptyList(),
+                defaultRestSeconds = null, imageRefs = emptyList(),
+                source = com.example.personalfitnessapp.data.local.entity.ExerciseSource.USER,
+                verified = false, formGuideAiGenerated = false, exerciseType = type,
+            )
+        )
+        toggle(id)
+    }
+
     fun toggle(id: String) = filters.update {
         when {
             single -> it.copy(selected = listOf(id))
@@ -135,6 +153,7 @@ fun AddExerciseScreen(
 ) {
     val state by viewModel.state.collectAsState()
     var filterSheet by remember { mutableStateOf<String?>(null) }
+    var creating by remember { mutableStateOf(false) }
     // "Add exercise" on Exercise Detail comes back here as a selection.
     androidx.compose.runtime.LaunchedEffect(selectRequest) {
         if (selectRequest != null) {
@@ -149,6 +168,7 @@ fun AddExerciseScreen(
             HevyTopBar(
                 title = if (viewModel.single) "Replace Exercise" else "Add Exercise",
                 navigation = { TextAction("Cancel", onClick = onCancel) },
+                actions = { TextAction("Create", onClick = { creating = true }) },
             )
         },
         bottomBar = {
@@ -201,6 +221,11 @@ fun AddExerciseScreen(
         }
     }
 
+    if (creating) CreateExerciseSheet(state.equipmentOptions, onDismiss = { creating = false }) { name, equipment, muscle, type ->
+        viewModel.create(name, equipment, muscle, type)
+        creating = false
+    }
+
     filterSheet?.let { which ->
         ModalBottomSheet(onDismissRequest = { filterSheet = null }, containerColor = AppSurface) {
             val options: List<Pair<String, () -> Unit>> = if (which == "equipment") {
@@ -250,5 +275,57 @@ private fun PickerRow(exercise: ExerciseEntity, selected: Boolean, onClick: () -
             IconButton(onClick = onInfo) { Icon(Icons.Outlined.Info, "Exercise info", tint = AppTextSecondary) }
         }
         HevyDivider(Modifier.padding(start = 82.dp))
+    }
+}
+
+private val TYPE_LABELS = listOf(
+    com.example.personalfitnessapp.data.local.entity.ExerciseType.WEIGHT_REPS to "Weight & Reps",
+    com.example.personalfitnessapp.data.local.entity.ExerciseType.REPS_ONLY to "Bodyweight Reps",
+    com.example.personalfitnessapp.data.local.entity.ExerciseType.ASSISTED_BODYWEIGHT to "Assisted Bodyweight",
+    com.example.personalfitnessapp.data.local.entity.ExerciseType.DURATION to "Duration",
+    com.example.personalfitnessapp.data.local.entity.ExerciseType.DISTANCE_DURATION to "Distance & Duration",
+)
+
+/** "Create" on the picker (not captured in the screenshots; built in the same sheet style). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CreateExerciseSheet(
+    equipmentOptions: List<String>,
+    onDismiss: () -> Unit,
+    onCreate: (String, String, Muscle?, com.example.personalfitnessapp.data.local.entity.ExerciseType) -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    var equipment by remember { mutableStateOf("Machine") }
+    var muscle by remember { mutableStateOf<Muscle?>(null) }
+    var type by remember { mutableStateOf(com.example.personalfitnessapp.data.local.entity.ExerciseType.WEIGHT_REPS) }
+    var picking by remember { mutableStateOf<String?>(null) }
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = AppSurface) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Create Exercise", Modifier.fillMaxWidth(), color = AppTextPrimary, fontSize = 18.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            androidx.compose.material3.OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Exercise name") })
+            SheetGroup {
+                SheetRow("Equipment", { picking = "equipment" }, trailing = { Text(equipment, color = AppTextSecondary) })
+                SheetRow("Primary muscle", { picking = "muscle" }, trailing = { Text(muscle?.displayName ?: "Select", color = AppTextSecondary) })
+                SheetRow("Exercise type", { picking = "type" }, trailing = { Text(TYPE_LABELS.first { it.first == type }.second, color = AppTextSecondary) }, showDivider = false)
+            }
+            PrimaryButton("Save", onClick = { onCreate(name, equipment, muscle, type) }, modifier = Modifier.fillMaxWidth(), enabled = name.isNotBlank())
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+    picking?.let { which ->
+        ModalBottomSheet(onDismissRequest = { picking = null }, containerColor = AppSurface) {
+            val options: List<Pair<String, () -> Unit>> = when (which) {
+                "equipment" -> (listOf("Barbell", "Dumbbell", "Cable", "Machine", "Bodyweight", "Kettlebell", "Resistance Band", "Other") + equipmentOptions)
+                    .distinct().map { e -> e to { equipment = e } }
+                "muscle" -> Muscle.entries.map { m -> m.displayName to { muscle = m } }
+                else -> TYPE_LABELS.map { (t, label) -> label to { type = t } }
+            }
+            LazyColumn(Modifier.heightIn(max = 520.dp)) {
+                item {
+                    SheetGroup { options.forEachIndexed { i, (label, action) -> SheetRow(label, { action(); picking = null }, showDivider = i < options.lastIndex) } }
+                    Spacer(Modifier.height(32.dp))
+                }
+            }
+        }
     }
 }
