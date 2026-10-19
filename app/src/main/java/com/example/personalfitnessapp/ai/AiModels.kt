@@ -33,13 +33,3 @@ data class ToolDeclaration(val name: String, val description: String, val parame
 data class ToolCall(val id: String, val name: String, val arguments: JsonObject)
 
 data class ToolResult(val callId: String, val name: String, val content: String)
-
-sealed interface ChatInput {
-    /** Starts an exchange: the user's message, with any prior transcript already folded into [text]. */
-    data class UserText(val text: String) : ChatInput
-
-    /** Continues an exchange after the app has executed the model's tool calls. */
-    data class ToolResults(val results: List<ToolResult>, val previousInteractionId: String) : ChatInput
-}
-
-data class ChatResponse(val text: String, val toolCalls: List<ToolCall>, val interactionId: String?)

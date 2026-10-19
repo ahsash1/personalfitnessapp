@@ -16,6 +16,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -39,6 +40,7 @@ import com.example.personalfitnessapp.ui.profile.ProfileFormFields
 @Composable
 fun SettingsScreen(
     onBackClick: () -> Unit,
+    onAiConnectionClick: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -87,6 +89,10 @@ fun SettingsScreen(
                     checked = uiState.keepScreenOnDuringSession,
                     onCheckedChange = viewModel::onKeepScreenOnChange,
                 )
+            }
+
+            OutlinedButton(onClick = onAiConnectionClick, modifier = Modifier.fillMaxWidth()) {
+                Text("AI connection: test which free models answer")
             }
 
             Text("Weight increments per equipment type", style = MaterialTheme.typography.titleMedium)

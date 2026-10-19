@@ -2,10 +2,8 @@ package com.example.personalfitnessapp.ai.coach
 
 import com.example.personalfitnessapp.ai.AiResult
 import com.example.personalfitnessapp.ai.AiService
-import com.example.personalfitnessapp.ai.ChatInput
 import com.example.personalfitnessapp.ai.ToolCall
 import com.example.personalfitnessapp.ai.ToolDeclaration
-import com.example.personalfitnessapp.ai.ToolResult
 import com.example.personalfitnessapp.domain.RoutineProposal
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -22,9 +20,9 @@ data class CoachTurn(val isUser: Boolean, val text: String)
 data class CoachReply(val text: String, val proposal: RoutineProposal?)
 
 /**
- * Drives one user message to a final answer: asks the model, runs whatever tools it
- * requests, feeds results back, and repeats. Kept free of Android and storage so the
- * loop is unit-testable with a fake [AiService].
+ * Turns one user message into a coach reply: folds in the visible conversation, lets the
+ * model call the app's tools through [AiService.chat], and keeps any routine the model
+ * drafted along the way. Free of Android and storage so it is unit-testable.
  */
 class CoachOrchestrator @Inject constructor(
     private val aiService: AiService,
@@ -35,28 +33,20 @@ class CoachOrchestrator @Inject constructor(
         history: List<CoachTurn>,
         userText: String,
     ): AiResult<CoachReply> {
-        var input: ChatInput = ChatInput.UserText(withTranscript(history, userText))
         var proposal: RoutineProposal? = null
-
-        repeat(MAX_TOOL_ROUNDS + 1) {
-            val response = when (val result = aiService.chat(systemInstruction, tools.declarations, input)) {
-                is AiResult.Failure -> return result
-                is AiResult.Success -> result.data
-            }
-            if (response.toolCalls.isEmpty()) {
-                return AiResult.Success(CoachReply(response.text.trim(), proposal))
-            }
-            val interactionId = response.interactionId
-                ?: return AiResult.Failure("The AI's reply couldn't be continued. Try again?", retryable = true)
-
-            val results = response.toolCalls.map { call ->
-                val outcome = runTool(call)
-                outcome.proposal?.let { proposal = it }
-                ToolResult(call.id, call.name, outcome.content)
-            }
-            input = ChatInput.ToolResults(results, interactionId)
+        val result = aiService.chat(
+            systemInstruction = systemInstruction,
+            tools = tools.declarations,
+            userText = withTranscript(history, userText),
+        ) { call ->
+            val outcome = runTool(call)
+            outcome.proposal?.let { proposal = it }
+            outcome.content
         }
-        return AiResult.Failure("The coach took too many steps on that. Try rephrasing?", retryable = true)
+        return when (result) {
+            is AiResult.Failure -> result
+            is AiResult.Success -> AiResult.Success(CoachReply(result.data.trim(), proposal))
+        }
     }
 
     private suspend fun runTool(call: ToolCall): ToolOutcome = try {
@@ -68,10 +58,7 @@ class CoachOrchestrator @Inject constructor(
         ToolOutcome("Error running ${call.name}: ${e.message ?: "unknown error"}")
     }
 
-    /**
-     * Prior turns ride along as text because a fresh exchange has no server-side session;
-     * only the tool loop within a single exchange uses previous_interaction_id.
-     */
+    /** Prior turns ride along as text: each exchange starts a fresh conversation with the model. */
     private fun withTranscript(history: List<CoachTurn>, userText: String): String {
         if (history.isEmpty()) return userText
         val transcript = history.joinToString("\n") { turn ->
@@ -81,7 +68,6 @@ class CoachOrchestrator @Inject constructor(
     }
 
     private companion object {
-        const val MAX_TOOL_ROUNDS = 5
         const val MAX_TURN_CHARS = 1_200
     }
 }

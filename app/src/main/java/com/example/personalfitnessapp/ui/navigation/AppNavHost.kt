@@ -43,6 +43,7 @@ import com.example.personalfitnessapp.ui.routines.RoutinesScreen
 import com.example.personalfitnessapp.ui.routines.WeeklyScheduleScreen
 import com.example.personalfitnessapp.ui.session.ExercisePickerScreen
 import com.example.personalfitnessapp.ui.session.WorkoutSessionScreen
+import com.example.personalfitnessapp.ui.settings.AiConnectionScreen
 import com.example.personalfitnessapp.ui.settings.SettingsScreen
 import com.example.personalfitnessapp.ui.swap.SwapScreen
 import com.example.personalfitnessapp.ui.today.TodayScreen
@@ -78,6 +79,7 @@ object Routes {
     const val SWAP = "swap/{mode}/{contextId}/{exerciseId}?routineId={routineId}"
     const val PHOTO_CAPTURE = "photo_capture"
     const val PHOTO_CONFIRMATION = "photo_confirmation/{photoPath}"
+    const val AI_CONNECTION = "ai_connection"
 
     fun exerciseDetail(exerciseId: String) = "exercise_detail/$exerciseId"
     fun exerciseHistory(exerciseId: String) = "exercise_history/$exerciseId"
@@ -201,7 +203,13 @@ fun AppNavHost(
                 )
             }
             composable(Routes.SETTINGS) {
-                SettingsScreen(onBackClick = { navController.popBackStack() })
+                SettingsScreen(
+                    onBackClick = { navController.popBackStack() },
+                    onAiConnectionClick = { navController.navigate(Routes.AI_CONNECTION) },
+                )
+            }
+            composable(Routes.AI_CONNECTION) {
+                AiConnectionScreen(onBackClick = { navController.popBackStack() })
             }
             composable(
                 Routes.WORKOUT_SESSION,

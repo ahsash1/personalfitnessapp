@@ -5,11 +5,11 @@ import com.example.personalfitnessapp.data.model.Muscle
 /**
  * Single entry point for all AI calls in the app. Every feature that needs AI
  * (form guide generation, photo -> exercise identification, coach chat) talks to
- * this interface only, never to a provider SDK directly, so swapping providers
- * stays a one-file change.
+ * this interface only, never to a provider directly; which free model actually
+ * answers is decided behind it.
  */
 interface AiService {
-    /** [imageBytes] should already be downscaled/compressed. */
+    /** [imageBytes] should already be downscaled/compressed (~1024px long side, JPEG). */
     suspend fun identifyMachine(imageBytes: ByteArray): AiResult<MachineIdentification>
 
     suspend fun generateFormGuide(
@@ -19,12 +19,16 @@ interface AiService {
     ): AiResult<FormGuideResult>
 
     /**
-     * One model round of the coach chat. The app, not the provider, runs tools: a response
-     * with [ChatResponse.toolCalls] is answered by another call with [ChatInput.ToolResults].
+     * One coach exchange: [userText] in, final answer out. When the model asks for a tool,
+     * [runTool] executes it and its returned text goes back to the model; this repeats until
+     * the model answers in plain text. [runTool] may be called again for the same request if
+     * a model fails part-way and the exchange is retried on another one, so tools must be
+     * safe to repeat.
      */
     suspend fun chat(
         systemInstruction: String,
         tools: List<ToolDeclaration>,
-        input: ChatInput,
-    ): AiResult<ChatResponse>
+        userText: String,
+        runTool: suspend (ToolCall) -> String,
+    ): AiResult<String>
 }
