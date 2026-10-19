@@ -23,6 +23,7 @@ class FitnessApp : Application() {
             exerciseSeeder.seedIfNeeded()
             runCatching { bundledImport.runOnce() }
             runCatching { bundledImport.refreshRecordsOnce() }
+            runCatching { bundledImport.circuitsOnce() }
         }
     }
 }

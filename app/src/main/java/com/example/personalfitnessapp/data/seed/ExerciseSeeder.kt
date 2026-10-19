@@ -24,7 +24,7 @@ class ExerciseSeeder @Inject constructor(
     private val appMetaDao: AppMetaDao,
 ) {
     companion object {
-        const val SEED_VERSION = "2"
+        const val SEED_VERSION = "3"
         private const val SEED_ASSET_PATH = "seed/free_exercise_db_v1.json"
         private const val CATALOG_ASSET_PATH = "seed/hevy_catalog.txt"
         private val json = Json { ignoreUnknownKeys = true }

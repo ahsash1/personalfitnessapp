@@ -79,6 +79,7 @@ object Routes {
     const val EXERCISE_PICKER = "exercise_picker"
     const val CALENDAR = "calendar"
     const val WORKOUT_SETTINGS = "workout_settings"
+    const val CIRCUIT = "circuit/{routineId}"
     const val STATISTICS = "statistics"
     const val BODY_METRICS = "body_metrics"
     const val COACH = "coach"
@@ -175,6 +176,7 @@ fun AppNavHost(
             }
             composable(Routes.WORKOUT_TAB) {
                 WorkoutTabScreen(
+                    onStartCircuit = { id -> navController.navigate("circuit/$id") },
                     onOpenWorkout = { navController.navigate(Routes.ACTIVE_WORKOUT) },
                     onRoutines = { navController.navigate(Routes.ROUTINES) },
                     onCoach = { navController.navigate(Routes.COACH) },
@@ -253,6 +255,12 @@ fun AppNavHost(
                     onAiConnectionClick = { navController.navigate(Routes.AI_CONNECTION) },
                     onWorkoutSettingsClick = { navController.navigate(Routes.WORKOUT_SETTINGS) },
                 )
+            }
+            composable(Routes.CIRCUIT) {
+                com.example.personalfitnessapp.ui.circuit.IntervalPlayerScreen(onDone = { id ->
+                    if (id != null) navController.navigate(Routes.celebration(id)) { popUpTo(Routes.CIRCUIT) { inclusive = true } }
+                    else navController.popBackStack()
+                })
             }
             composable(Routes.WORKOUT_SETTINGS) {
                 WorkoutSettingsScreen(onBack = { navController.popBackStack() })

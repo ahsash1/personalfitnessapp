@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.ListAlt
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -80,7 +81,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-data class RoutineCard(val id: Long, val name: String, val exercises: String)
+data class RoutineCard(val id: Long, val name: String, val exercises: String, val circuit: String? = null)
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -89,7 +90,16 @@ class WorkoutTabViewModel @Inject constructor(
     private val routines: RoutineRepository,
     private val exercises: ExerciseRepository,
     private val settings: SettingsRepository,
+    private val circuits: com.example.personalfitnessapp.data.repository.CircuitRepository,
 ) : ViewModel() {
+    /** Creates a timed circuit from pasted timer text; returns its name, or null if nothing parsed. */
+    fun createCircuit(text: String, onDone: (String?) -> Unit) = viewModelScope.launch {
+        val plan = com.example.personalfitnessapp.domain.workout.CircuitText.parse(text)
+        if (plan == null) { onDone(null); return@launch }
+        circuits.create(plan)
+        onDone("${plan.name}: ${plan.moves.size} moves, ${plan.workSec}s work / ${plan.restSec}s rest")
+    }
+
     val active: StateFlow<ActiveWorkout?> = log.active
 
     val routineCards: StateFlow<List<RoutineCard>> = routines.observeRoutines().flatMapLatest { list ->
@@ -97,7 +107,13 @@ class WorkoutTabViewModel @Inject constructor(
         else combine(list.map { r -> routines.observeRoutineExercises(r.id).map { r to it } }) { it.toList() }
     }.combine(exercises.observeAll()) { pairs, all ->
         val names = all.associate { it.id to it.name }
-        pairs.map { (r, rows) -> RoutineCard(r.id, r.name, rows.sortedBy { it.order }.joinToString(", ") { names[it.exerciseId].orEmpty() }) }
+        pairs.map { (r, rows) ->
+            val circuit = if (r.isCircuit) {
+                val total = com.example.personalfitnessapp.domain.workout.CircuitTimeline.phases(r.workSeconds ?: 45, r.restSeconds ?: 15, r.rounds ?: 1, rows.size).sumOf { it.seconds }
+                "${r.workSeconds}s work / ${r.restSeconds}s rest · ${rows.size} moves${if ((r.rounds ?: 1) > 1) " × ${r.rounds}" else ""} · ${(total + 59) / 60} min"
+            } else null
+            RoutineCard(r.id, r.name, rows.sortedBy { it.order }.joinToString(", ") { names[it.exerciseId].orEmpty() }, circuit)
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun startEmpty(onStarted: () -> Unit) = viewModelScope.launch { log.start(); onStarted() }
@@ -126,6 +142,7 @@ class WorkoutTabViewModel @Inject constructor(
 /** docs/screens/workout_tab.md, img 01. */
 @Composable
 fun WorkoutTabScreen(
+    onStartCircuit: (Long) -> Unit = {},
     onOpenWorkout: () -> Unit,
     onRoutines: () -> Unit,
     onCoach: () -> Unit,
@@ -134,6 +151,8 @@ fun WorkoutTabScreen(
     val active by viewModel.active.collectAsState()
     val routines by viewModel.routineCards.collectAsState()
     var pending by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var pasting by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
     val guarded = { start: () -> Unit -> if (active != null) pending = start else start() }
 
     LazyColumn(Modifier.fillMaxSize().background(AppBackground).statusBarsPadding()) {
@@ -162,21 +181,55 @@ fun WorkoutTabScreen(
                 DashboardTile(Icons.Outlined.ListAlt, "New Routine", onRoutines, Modifier.weight(1f), centered = true, height = 100.dp)
                 DashboardTile(Icons.Outlined.Search, "Explore Routines", onRoutines, Modifier.weight(1f), centered = true, height = 100.dp)
             }
+            Spacer(Modifier.height(10.dp))
+            SecondaryButton(
+                "New timed circuit (paste from a timer app)",
+                onClick = { pasting = true },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                leadingIcon = Icons.Outlined.Timer,
+                alignStart = true,
+            )
             Spacer(Modifier.height(16.dp))
         }
         items(routines, key = { it.id }) { r ->
             Surface(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), shape = RoundedCornerShape(12.dp), color = AppSurface) {
                 Column(Modifier.padding(16.dp)) {
                     Text(r.name, color = AppTextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    r.circuit?.let { Text(it, color = AppPrimary, fontSize = 14.sp) }
                     if (r.exercises.isNotBlank()) {
                         Text(r.exercises, color = AppTextSecondary, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                     Spacer(Modifier.height(12.dp))
-                    PrimaryButton("Start Routine", onClick = { guarded { viewModel.startRoutine(r.id, onOpenWorkout) } }, modifier = Modifier.fillMaxWidth())
+                    if (r.circuit != null) PrimaryButton("Start Circuit", onClick = { onStartCircuit(r.id) }, modifier = Modifier.fillMaxWidth())
+                    else PrimaryButton("Start Routine", onClick = { guarded { viewModel.startRoutine(r.id, onOpenWorkout) } }, modifier = Modifier.fillMaxWidth())
                 }
             }
         }
         item { Spacer(Modifier.height(140.dp)) }
+    }
+
+    if (pasting) {
+        var text by remember { mutableStateOf("") }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { pasting = false },
+            containerColor = AppSurface,
+            title = { Text("New timed circuit") },
+            text = {
+                androidx.compose.material3.OutlinedTextField(
+                    text, { text = it }, Modifier.fillMaxWidth().height(260.dp),
+                    placeholder = { Text("Abs // 50s work, 10s rest\n00:20 Leg Switches\n01:20 Leg Lowers\n...") },
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    viewModel.createCircuit(text) { result ->
+                        android.widget.Toast.makeText(context, result?.let { "Created $it" } ?: "Couldn't find any moves in that text", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                    pasting = false
+                }) { Text("Create", color = AppPrimary) }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { pasting = false }) { Text("Cancel", color = AppTextSecondary) } },
+        )
     }
 
     pending?.let { start ->

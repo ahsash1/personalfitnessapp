@@ -275,3 +275,14 @@ Jump Rope|D||||=Rope_Jumping
 Battle Ropes|D||||=Battling_Ropes
 Swimming|C|None|LATS|FRONT_DELTS,TRICEPS,QUADS|
 Hiking|C|None|QUADS|GLUTES,CALVES,HAMSTRINGS|~Trail_Running_Walking
+# Timed core moves (interval circuits, e.g. 50 s work / 10 s rest)
+Leg Switches|D|Bodyweight|ABS|HIP_ADDUCTORS|~Flutter_Kicks
+Reverse Crunch + Leg Opener|D|Bodyweight|ABS|HIP_ABDUCTORS|~Reverse_Crunch
+Leg Lowers|D|Bodyweight|ABS||~Leg_Lift
+Scissor Crossovers|D|Bodyweight|ABS|HIP_ADDUCTORS|~Flutter_Kicks
+Cross Crunches|D|Bodyweight|OBLIQUES|ABS|~Cross-Body_Crunch
+Butterfly Crunches|D|Bodyweight|ABS||~Frog_Sit-Ups
+Single Leg Extensions (Core)|D|Bodyweight|ABS||~Dead_Bug
+Heel Taps|D|Bodyweight|OBLIQUES|ABS|~Alternate_Heel_Touchers
+Plank Knee Tucks|D|Bodyweight|ABS|FRONT_DELTS|~Plank
+Spider Crunches|D|Bodyweight|OBLIQUES|ABS|~Spider_Crawl
