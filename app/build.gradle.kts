@@ -20,6 +20,10 @@ val geminiApiKey: String = localProperties.getProperty("GEMINI_API_KEY")
             "to local.properties (never commit it) before building."
     )
 
+// Optional backup AI provider (free Groq key, console.groq.com). Without it the app
+// simply has fewer models to fall back on.
+val groqApiKey: String = localProperties.getProperty("GROQ_API_KEY").orEmpty()
+
 android {
     namespace = "com.example.personalfitnessapp"
     compileSdk {
@@ -36,6 +40,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
+        buildConfigField("String", "GROQ_API_KEY", "\"$groqApiKey\"")
     }
 
     buildTypes {
@@ -53,6 +58,10 @@ android {
         compose = true
         buildConfig = true
     }
+    testOptions {
+        // android.util.Log is a stub on the JVM; let logging in code under test no-op.
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 ksp {
@@ -64,6 +73,7 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.core)
+    implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
