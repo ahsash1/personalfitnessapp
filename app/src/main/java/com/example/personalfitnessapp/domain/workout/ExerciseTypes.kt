@@ -22,8 +22,9 @@ object ExerciseTypes {
 
     private val BODYWEIGHT = setOf("Bodyweight", "None")
 
-    fun usesWeight(type: ExerciseType) = type == ExerciseType.WEIGHT_REPS
-    fun usesReps(type: ExerciseType) = type == ExerciseType.WEIGHT_REPS || type == ExerciseType.REPS_ONLY
+    fun usesWeight(type: ExerciseType) = type == ExerciseType.WEIGHT_REPS || type == ExerciseType.ASSISTED_BODYWEIGHT
+    fun usesReps(type: ExerciseType) =
+        type == ExerciseType.WEIGHT_REPS || type == ExerciseType.REPS_ONLY || type == ExerciseType.ASSISTED_BODYWEIGHT
     fun usesDistance(type: ExerciseType) = type == ExerciseType.DISTANCE_DURATION
     fun usesDuration(type: ExerciseType) = type == ExerciseType.DURATION || type == ExerciseType.DISTANCE_DURATION
 

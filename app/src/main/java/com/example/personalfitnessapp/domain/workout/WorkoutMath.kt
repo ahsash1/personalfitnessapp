@@ -88,7 +88,7 @@ object WorkoutMath {
         val r = resolve(set, placeholder)
         val ok = when (type) {
             ExerciseType.WEIGHT_REPS -> r.reps != null && r.reps > 0
-            ExerciseType.REPS_ONLY -> r.reps != null && r.reps > 0
+            ExerciseType.REPS_ONLY, ExerciseType.ASSISTED_BODYWEIGHT -> r.reps != null && r.reps > 0
             ExerciseType.DURATION -> r.durationSec != null && r.durationSec > 0
             ExerciseType.DISTANCE_DURATION -> (r.durationSec ?: 0) > 0 || (r.distanceKm ?: 0.0) > 0
         }

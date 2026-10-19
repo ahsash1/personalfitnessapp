@@ -38,4 +38,12 @@ data class ExerciseEntity(
 )
 
 /** Which columns the set table shows (docs/screens/active_workout.md, cardio rows). */
-enum class ExerciseType { WEIGHT_REPS, REPS_ONLY, DURATION, DISTANCE_DURATION }
+enum class ExerciseType {
+    WEIGHT_REPS,
+    REPS_ONLY,
+    DURATION,
+    DISTANCE_DURATION,
+
+    /** Assisted pull-ups/dips: the kg entered is help from the machine, so less is better and it isn't volume. */
+    ASSISTED_BODYWEIGHT,
+}

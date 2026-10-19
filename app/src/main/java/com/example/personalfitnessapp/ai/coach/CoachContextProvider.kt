@@ -76,6 +76,7 @@ class CoachContextProvider @Inject constructor(
                     val value = when (type) {
                         ExerciseType.WEIGHT_REPS -> "${WorkoutFormat.weight(s.weightKg.toDouble())}x${s.reps}"
                         ExerciseType.REPS_ONLY -> "${s.reps} reps"
+                        ExerciseType.ASSISTED_BODYWEIGHT -> "${s.reps} reps with ${WorkoutFormat.weight(s.weightKg.toDouble())}kg assistance"
                         else -> WorkoutFormat.distanceTime(s.distanceKm?.toDouble(), s.durationSec)
                     }
                     if (s.type == SetType.NORMAL) value else "$value (${s.type.name.lowercase()})"
@@ -101,12 +102,14 @@ class CoachContextProvider @Inject constructor(
                 val entered = when (type) {
                     ExerciseType.WEIGHT_REPS -> if (r.weightKg != null || r.reps != null) "${r.weightKg?.let(WorkoutFormat::weight) ?: "?"}x${r.reps ?: "?"}" else null
                     ExerciseType.REPS_ONLY -> r.reps?.let { "$it reps" }
+                    ExerciseType.ASSISTED_BODYWEIGHT -> r.reps?.let { "$it reps with ${WorkoutFormat.weight(r.weightKg ?: 0.0)}kg assistance" }
                     else -> if (r.durationSec != null || r.distanceKm != null) WorkoutFormat.distanceTime(r.distanceKm, r.durationSec) else null
                 }
                 val last = previous.getOrNull(i)?.let { p ->
                     when (type) {
                         ExerciseType.WEIGHT_REPS -> "${WorkoutFormat.weight(p.weightKg ?: 0.0)}x${p.reps ?: 0}"
                         ExerciseType.REPS_ONLY -> "${p.reps ?: 0} reps"
+                        ExerciseType.ASSISTED_BODYWEIGHT -> "${p.reps ?: 0} reps with ${WorkoutFormat.weight(p.weightKg ?: 0.0)}kg assistance"
                         else -> WorkoutFormat.distanceTime(p.distanceKm, p.durationSec)
                     }
                 }

@@ -1,6 +1,7 @@
 package com.example.personalfitnessapp.ui.detail
 
 import androidx.compose.foundation.layout.Arrangement
+import com.example.personalfitnessapp.ui.components.ExerciseAnimation
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -88,17 +89,7 @@ private fun ExerciseDetailContent(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        if (exercise.imageRefs.isNotEmpty()) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(exercise.imageRefs) { url ->
-                    AsyncImage(
-                        model = url,
-                        contentDescription = exercise.name,
-                        modifier = Modifier.height(180.dp),
-                    )
-                }
-            }
-        }
+        ExerciseAnimation(exercise.imageRefs, exercise.name)
 
         if (exercise.formGuideAiGenerated) {
             AssistChip(onClick = {}, label = { Text("AI-generated form guide — double-check") })

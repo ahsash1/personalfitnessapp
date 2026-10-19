@@ -137,7 +137,8 @@ object ExerciseNameMatcher {
         .filter { it.isNotEmpty() }.map { it.removeSuffix("s") }.toSortedSet()
 
     fun match(name: String, catalog: List<ExerciseEntity>): ExerciseEntity? {
-        catalog.firstOrNull { e -> e.name.equals(name, true) || e.aliases.any { it.equals(name, true) } }?.let { return it }
+        catalog.firstOrNull { it.name.equals(name, true) }?.let { return it }
+        catalog.firstOrNull { e -> e.aliases.any { it.equals(name, true) } }?.let { return it }
         val wanted = tokens(name)
         catalog.firstOrNull { e -> tokens(e.name) == wanted || e.aliases.any { tokens(it) == wanted } }?.let { return it }
         return DuplicateExerciseMatcher.findLikelyMatch(name, catalog)

@@ -9,6 +9,8 @@ import com.example.personalfitnessapp.data.local.entity.SetType
 import com.example.personalfitnessapp.data.local.entity.WorkoutSessionEntity
 import com.example.personalfitnessapp.di.ApplicationScope
 import com.example.personalfitnessapp.domain.workout.DraftConversion
+import com.example.personalfitnessapp.domain.workout.ExerciseTypes
+import com.example.personalfitnessapp.data.local.entity.ExerciseType
 import com.example.personalfitnessapp.domain.workout.HistoryBests
 import com.example.personalfitnessapp.domain.workout.LoggedSet
 import com.example.personalfitnessapp.domain.workout.PreviousSet
@@ -152,7 +154,9 @@ class WorkoutLogRepository @Inject constructor(
     suspend fun recomputeRecords(exerciseIds: Collection<String>) {
         exerciseIds.distinct().forEach { exerciseId ->
             val logged = loggedSets(exerciseId)
-            val badges = Records.badges(logged)
+            // Records are weight-based; assisted, bodyweight and cardio exercises get none.
+            val weighted = db.exerciseDao().getById(exerciseId)?.let(ExerciseTypes::of) == ExerciseType.WEIGHT_REPS
+            val badges = if (weighted) Records.badges(logged) else emptyMap()
             logged.forEach { dao.setBadges(it.id, Records.encode(badges[it.id].orEmpty())) }
         }
     }

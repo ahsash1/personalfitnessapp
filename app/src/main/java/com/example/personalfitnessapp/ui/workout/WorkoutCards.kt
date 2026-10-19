@@ -126,6 +126,7 @@ fun supersetColor(group: Int?): Color? = group?.let { SupersetColors[(it - 1).mo
 fun setSummary(type: ExerciseType, weightKg: Double?, reps: Int?, distanceKm: Double?, durationSec: Int?): String = when (type) {
     ExerciseType.WEIGHT_REPS -> if (weightKg != null && reps != null) WorkoutFormat.weightReps(weightKg, reps) else "—"
     ExerciseType.REPS_ONLY -> reps?.let { "$it reps" } ?: "—"
+    ExerciseType.ASSISTED_BODYWEIGHT -> if (reps != null) "-${WorkoutFormat.weight(weightKg ?: 0.0)}kg x $reps" else "—"
     ExerciseType.DURATION -> durationSec?.let { WorkoutFormat.clock(it.toLong()) } ?: "—"
     ExerciseType.DISTANCE_DURATION -> WorkoutFormat.distanceTime(distanceKm, durationSec)
 }
@@ -269,7 +270,7 @@ private fun TableHeader(type: ExerciseType) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         HeaderText("SET", Modifier.width(SetColWidth))
         HeaderText("PREVIOUS", Modifier.weight(1.4f))
-        if (ExerciseTypes.usesWeight(type)) HeaderText("KG", Modifier.weight(1f))
+        if (ExerciseTypes.usesWeight(type)) HeaderText(if (type == ExerciseType.ASSISTED_BODYWEIGHT) "-KG" else "KG", Modifier.weight(1f))
         if (ExerciseTypes.usesDistance(type)) HeaderText("KM", Modifier.weight(1f))
         if (ExerciseTypes.usesReps(type)) HeaderText("REPS", Modifier.weight(1f))
         if (ExerciseTypes.usesDuration(type)) HeaderText("TIME", Modifier.weight(1f))

@@ -1,0 +1,277 @@
+# Hevy-style exercise names layered over free-exercise-db (applied by ExerciseSeeder).
+# name|type|equipment|primary|secondary|ref
+# type: W weight+reps, R reps only, D duration, C distance+duration, A assisted bodyweight (-kg)
+# ref: =ID renames that dataset exercise (old name kept as an alias, its muscles kept unless given)
+#      ~ID creates a new exercise that borrows that dataset exercise's photos and steps
+# Chest
+Bench Press (Barbell)|W||||=Barbell_Bench_Press_-_Medium_Grip
+Bench Press (Dumbbell)|W||||=Dumbbell_Bench_Press
+Bench Press (Smith Machine)|W||||=Smith_Machine_Bench_Press
+Bench Press (Cable)|W||||=Cable_Chest_Press
+Bench Press - Close Grip (Barbell)|W||||=Close-Grip_Barbell_Bench_Press
+Bench Press - Wide Grip (Barbell)|W||||=Wide-Grip_Barbell_Bench_Press
+Incline Bench Press (Barbell)|W||||=Barbell_Incline_Bench_Press_-_Medium_Grip
+Incline Bench Press (Dumbbell)|W||||=Incline_Dumbbell_Press
+Incline Bench Press (Smith Machine)|W||||=Smith_Machine_Incline_Bench_Press
+Decline Bench Press (Barbell)|W||||=Decline_Barbell_Bench_Press
+Decline Bench Press (Dumbbell)|W||||=Decline_Dumbbell_Bench_Press
+Decline Bench Press (Machine)|W||||=Leverage_Decline_Chest_Press
+Decline Bench Press (Smith Machine)|W||||=Smith_Machine_Decline_Press
+Chest Press (Machine)|W||||=Leverage_Chest_Press
+Incline Chest Press (Machine)|W||||=Leverage_Incline_Chest_Press
+Iso-Lateral Chest Press (Machine)|W|Machine|CHEST|TRICEPS,FRONT_DELTS|~Leverage_Chest_Press
+Seated Chest Press (Machine)|W||||=Machine_Bench_Press
+Chest Fly (Machine)|W||||=Butterfly
+Chest Fly (Dumbbell)|W||||=Dumbbell_Flyes
+Incline Chest Fly (Dumbbell)|W||||=Incline_Dumbbell_Flyes
+Decline Chest Fly (Dumbbell)|W||||=Decline_Dumbbell_Flyes
+Cable Fly Crossovers|W||||=Cable_Crossover
+Low Cable Fly Crossovers|W||||=Low_Cable_Crossover
+Chest Fly (Cable)|W||||=Flat_Bench_Cable_Flyes
+Incline Chest Fly (Cable)|W||||=Incline_Cable_Flye
+Chest Dip|R||||=Dips_-_Chest_Version
+Chest Dip (Assisted)|A|Machine|CHEST|TRICEPS,FRONT_DELTS|~Dips_-_Chest_Version
+Chest Dip (Weighted)|W|Other|CHEST|TRICEPS,FRONT_DELTS|~Dips_-_Chest_Version
+Push Up|R||||=Pushups
+Incline Push Ups|R||||=Incline_Push-Up
+Decline Push Up|R||||=Decline_Push-Up
+Diamond Push Up|R||||=Push-Ups_-_Close_Triceps_Position
+Push Up (Weighted)|W|Bodyweight|CHEST|TRICEPS,FRONT_DELTS|~Pushups
+Pullover (Dumbbell)|W||||=Straight-Arm_Dumbbell_Pullover
+Floor Press (Barbell)|W||||=Floor_Press
+Floor Press (Dumbbell)|W||||=Dumbbell_Floor_Press
+Hex Press (Dumbbell)|W||||=Close-Grip_Dumbbell_Press
+# Back
+Lat Pulldown (Cable)|W||||=Wide-Grip_Lat_Pulldown
+Lat Pulldown - Close Grip (Cable)|W||||=Close-Grip_Front_Lat_Pulldown
+Lat Pulldown (Machine)|W|Machine|LATS|BICEPS,UPPER_BACK|~Wide-Grip_Lat_Pulldown
+Lat Pulldown - V Bar (Cable)|W||||=V-Bar_Pulldown
+Reverse Grip Lat Pulldown (Cable)|W||||=Underhand_Cable_Pulldowns
+Single Arm Lat Pulldown|W||||=One_Arm_Lat_Pulldown
+Pull Up|R||||=Pullups
+Pull Up (Assisted)|A|Machine|LATS|BICEPS,UPPER_BACK|~Band_Assisted_Pull-Up
+Pull Up (Band)|A|Resistance Band|LATS|BICEPS,UPPER_BACK|~Band_Assisted_Pull-Up
+Pull Up (Weighted)|W||||=Weighted_Pull_Ups
+Wide Pull Up|R||||=Wide-Grip_Rear_Pull-Up
+Chin Up|R||||=Chin-Up
+Chin Up (Assisted)|A|Machine|LATS|BICEPS,UPPER_BACK|~Chin-Up
+Chin Up (Weighted)|W|Other|LATS|BICEPS,UPPER_BACK|~Chin-Up
+Bent Over Row (Barbell)|W||||=Bent_Over_Barbell_Row
+Bent Over Row (Dumbbell)|W||||=Bent_Over_Two-Dumbbell_Row
+Dumbbell Row|W||||=One-Arm_Dumbbell_Row
+Pendlay Row (Barbell)|W|Barbell|UPPER_BACK|LATS,BICEPS,REAR_DELTS|~Bent_Over_Barbell_Row
+Reverse Grip Bent Over Row (Barbell)|W||||=Reverse_Grip_Bent-Over_Rows
+T Bar Row|W||||=T-Bar_Row_with_Handle
+Seated Cable Row - V Grip (Cable)|W||||=Seated_Cable_Rows
+Seated Cable Row - Bar Grip|W|Cable|UPPER_BACK|LATS,BICEPS,REAR_DELTS|~Seated_Cable_Rows
+Seated Row (Machine)|W||||=Leverage_Iso_Row
+Iso-Lateral Row (Machine)|W|Machine|UPPER_BACK|LATS,BICEPS,REAR_DELTS|~Leverage_Iso_Row
+Iso-Lateral High Row (Machine)|W||||=Leverage_High_Row
+Iso-Lateral Low Row|W|Machine|LATS|UPPER_BACK,BICEPS|~Leverage_Iso_Row
+Chest Supported Incline Row (Dumbbell)|W||||=Dumbbell_Incline_Row
+Smith Machine Row|W||||=Smith_Machine_Bent_Over_Row
+Single Arm Cable Row|W||||=Seated_One-arm_Cable_Pulley_Rows
+Inverted Row|R||||=Inverted_Row
+Meadows Rows (Barbell)|W||||=One-Arm_Long_Bar_Row
+Renegade Row (Dumbbell)|W||||=Alternating_Renegade_Row
+Face Pull|W||||=Face_Pull
+Straight Arm Lat Pulldown (Cable)|W||||=Straight-Arm_Pulldown
+Rope Straight Arm Pulldown|W||||=Rope_Straight-Arm_Pulldown
+Shrug (Barbell)|W||||=Barbell_Shrug
+Shrug (Dumbbell)|W||||=Dumbbell_Shrug
+Shrug (Cable)|W||||=Cable_Shrugs
+Shrug (Machine)|W||||=Leverage_Shrug
+Shrug (Smith Machine)|W||||=Smith_Machine_Behind_the_Back_Shrug
+Back Extension (Hyperextension)|R||||=Hyperextensions_Back_Extensions
+Back Extension (Weighted Hyperextension)|W|Other|LOWER_BACK|GLUTES,HAMSTRINGS|~Hyperextensions_Back_Extensions
+Rack Pull|W||||=Rack_Pulls
+Deadlift (Barbell)|W||||=Barbell_Deadlift
+Deadlift (Dumbbell)|W|Dumbbell|HAMSTRINGS|GLUTES,LOWER_BACK,TRAPS,FOREARMS|~Stiff-Legged_Dumbbell_Deadlift
+Deadlift (Smith Machine)|W||||=Smith_Machine_Stiff-Legged_Deadlift
+Deadlift (Machine)|W||||=Leverage_Deadlift
+Trap Bar Deadlift|W||||=Trap_Bar_Deadlift
+Romanian Deadlift (Barbell)|W||||=Romanian_Deadlift
+Romanian Deadlift (Dumbbell)|W||||=Stiff-Legged_Dumbbell_Deadlift
+Straight Leg Deadlift|W||||=Stiff-Legged_Barbell_Deadlift
+Sumo Deadlift|W||||=Sumo_Deadlift
+Good Morning (Barbell)|W||||=Good_Morning
+Rear Delt Reverse Fly (Machine)|W||||=Reverse_Machine_Flyes
+Rear Delt Reverse Fly (Dumbbell)|W||||=Seated_Bent-Over_Rear_Delt_Raise
+Rear Delt Reverse Fly (Cable)|W||||=Cable_Rear_Delt_Fly
+Band Pull Apart|R||||=Band_Pull_Apart
+# Shoulders
+Overhead Press (Barbell)|W||||=Standing_Military_Press
+Overhead Press (Dumbbell)|W||||=Standing_Dumbbell_Press
+Overhead Press (Smith Machine)|W||||=Smith_Machine_Overhead_Shoulder_Press
+Seated Overhead Press (Barbell)|W||||=Seated_Barbell_Military_Press
+Seated Overhead Press (Dumbbell)|W||||=Seated_Dumbbell_Press
+Shoulder Press (Dumbbell)|W||||=Dumbbell_Shoulder_Press
+Shoulder Press (Machine Plates)|W||||=Leverage_Shoulder_Press
+Seated Shoulder Press (Machine)|W||||=Machine_Shoulder_Military_Press
+Shoulder Press (Cable)|W||||=Cable_Shoulder_Press
+Single Arm Overhead Press (Dumbbell)|W||||=Dumbbell_One-Arm_Shoulder_Press
+Arnold Press (Dumbbell)|W||||=Arnold_Dumbbell_Press
+Lateral Raise (Dumbbell)|W||||=Side_Lateral_Raise
+Lateral Raise (Cable)|W||||=Standing_Low-Pulley_Deltoid_Raise
+Lateral Raise (Machine)|W|Machine|SIDE_DELTS|FRONT_DELTS,TRAPS|~Side_Lateral_Raise
+Lateral Raise (Band)|W||||=Lateral_Raise_-_With_Bands
+Seated Lateral Raise (Dumbbell)|W||||=Seated_Side_Lateral_Raise
+Single Arm Lateral Raise (Dumbbell)|W||||=One-Arm_Side_Laterals
+Front Raise (Dumbbell)|W||||=Front_Dumbbell_Raise
+Front Raise (Barbell)|W||||=Standing_Front_Barbell_Raise_Over_Head
+Front Raise (Cable)|W||||=Front_Cable_Raise
+Front Raise (Plate)|W||||=Front_Plate_Raise
+Upright Row (Barbell)|W||||=Upright_Barbell_Row
+Upright Row (Dumbbell)|W||||=Standing_Dumbbell_Upright_Row
+Upright Row (Cable)|W||||=Upright_Cable_Row
+Rear Delt Row (Cable)|W||||=Cable_Rope_Rear-Delt_Rows
+External Rotation (Cable)|W||||=External_Rotation_with_Cable
+# Arms
+Bicep Curl (Barbell)|W||||=Barbell_Curl
+Bicep Curl (Dumbbell)|W||||=Dumbbell_Bicep_Curl
+Bicep Curl (Cable)|W||||=Standing_Biceps_Cable_Curl
+Bicep Curl (Machine)|W||||=Machine_Bicep_Curl
+EZ Bar Biceps Curl|W||||=EZ-Bar_Curl
+Hammer Curl (Dumbbell)|W||||=Hammer_Curls
+Hammer Curl (Cable)|W||||=Cable_Hammer_Curls_-_Rope_Attachment
+Cross Body Hammer Curl|W||||=Cross_Body_Hammer_Curl
+Preacher Curl (Barbell)|W||||=Preacher_Curl
+Preacher Curl (Dumbbell)|W||||=One_Arm_Dumbbell_Preacher_Curl
+Preacher Curl (Machine)|W||||=Machine_Preacher_Curls
+Preacher Curl (Cable)|W||||=Cable_Preacher_Curl
+Concentration Curl|W||||=Concentration_Curls
+Seated Incline Curl (Dumbbell)|W||||=Incline_Dumbbell_Curl
+Spider Curl (Barbell)|W||||=Spider_Curl
+Reverse Curl (Barbell)|W||||=Reverse_Barbell_Curl
+Reverse Curl (Dumbbell)|W||||=Standing_Dumbbell_Reverse_Curl
+Reverse Curl (Cable)|W||||=Reverse_Cable_Curl
+Overhead Curl (Cable)|W||||=Overhead_Cable_Curl
+Single Arm Curl (Cable)|W||||=Standing_One-Arm_Cable_Curl
+Drag Curl|W||||=Drag_Curl
+Zottman Curl (Dumbbell)|W||||=Zottman_Curl
+Triceps Pushdown|W||||=Triceps_Pushdown
+Triceps Rope Pushdown|W||||=Triceps_Pushdown_-_Rope_Attachment
+Triceps Pushdown - V Bar|W||||=Triceps_Pushdown_-_V-Bar_Attachment
+Reverse Grip Triceps Pushdown|W||||=Reverse_Grip_Triceps_Pushdown
+Single Arm Triceps Pushdown (Cable)|W||||=Cable_One_Arm_Tricep_Extension
+Triceps Extension (Cable)|W||||=Cable_Rope_Overhead_Triceps_Extension
+Triceps Extension (Dumbbell)|W||||=Standing_Dumbbell_Triceps_Extension
+Triceps Extension (Barbell)|W||||=Standing_Overhead_Barbell_Triceps_Extension
+Triceps Extension (Machine)|W||||=Machine_Triceps_Extension
+Overhead Triceps Extension (Cable)|W||||=Triceps_Overhead_Extension_with_Rope
+Skullcrusher (Barbell)|W||||=Lying_Triceps_Press
+Skullcrusher (Dumbbell)|W||||=Lying_Dumbbell_Tricep_Extension
+Skullcrusher (EZ Bar)|W||||=EZ-Bar_Skullcrusher
+Triceps Kickback (Dumbbell)|W||||=Tricep_Dumbbell_Kickback
+Triceps Dip|R||||=Dips_-_Triceps_Version
+Triceps Dip (Assisted)|A|Machine|TRICEPS|CHEST,FRONT_DELTS|~Dip_Machine
+Triceps Dip (Weighted)|W|Other|TRICEPS|CHEST,FRONT_DELTS|~Dips_-_Triceps_Version
+Bench Dip|R||||=Bench_Dips
+Seated Dip Machine|W||||=Dip_Machine
+JM Press (Barbell)|W||||=JM_Press
+Wrist Curl (Barbell)|W||||=Palms-Up_Barbell_Wrist_Curl_Over_A_Bench
+Wrist Curl (Dumbbell)|W||||=Palms-Up_Dumbbell_Wrist_Curl_Over_A_Bench
+Reverse Wrist Curl (Barbell)|W||||=Palms-Down_Wrist_Curl_Over_A_Bench
+Farmers Walk|W|Dumbbell|FOREARMS|TRAPS,ABS,GLUTES|~Farmers_Walk
+# Legs
+Squat (Barbell)|W||||=Barbell_Squat
+Full Squat|W||||=Barbell_Full_Squat
+Front Squat|W||||=Front_Barbell_Squat
+Squat (Smith Machine)|W||||=Smith_Machine_Squat
+Squat (Dumbbell)|W||||=Dumbbell_Squat
+Squat (Bodyweight)|R||||=Bodyweight_Squat
+Goblet Squat|W||||=Goblet_Squat
+Box Squat (Barbell)|W||||=Box_Squat
+Hack Squat (Machine)|W||||=Hack_Squat
+Hack Squat (Barbell)|W||||=Barbell_Hack_Squat
+Pendulum Squat (Machine)|W|Machine|QUADS|GLUTES,HIP_ADDUCTORS|~Hack_Squat
+Leg Press (Machine)|W||||=Leg_Press
+Leg Press Horizontal (Machine)|W|Machine|QUADS|GLUTES,HAMSTRINGS|~Leg_Press
+Single Leg Press (Machine)|W|Machine|QUADS|GLUTES,HAMSTRINGS|~Leg_Press
+Leg Extension (Machine)|W||||=Leg_Extensions
+Single Leg Extensions|W||||=Single-Leg_Leg_Extension
+Lying Leg Curl (Machine)|W||||=Lying_Leg_Curls
+Seated Leg Curl (Machine)|W||||=Seated_Leg_Curl
+Standing Leg Curls|W||||=Standing_Leg_Curl
+Lunge (Barbell)|W||||=Barbell_Lunge
+Lunge (Dumbbell)|W||||=Dumbbell_Lunges
+Lunge|R||||=Bodyweight_Walking_Lunge
+Walking Lunge (Dumbbell)|W|Dumbbell|QUADS|GLUTES,HAMSTRINGS|~Dumbbell_Lunges
+Walking Lunge (Barbell)|W||||=Barbell_Walking_Lunge
+Reverse Lunge (Dumbbell)|W||||=Dumbbell_Rear_Lunge
+Reverse Lunge (Barbell)|W||||=Elevated_Back_Lunge
+Bulgarian Split Squat|W||||=Split_Squat_with_Dumbbells
+Split Squat (Smith Machine)|W||||=Smith_Single-Leg_Split_Squat
+Step Up (Dumbbell)|W||||=Dumbbell_Step_Ups
+Step Up (Barbell)|W||||=Barbell_Step_Ups
+Hip Thrust (Barbell)|W||||=Barbell_Hip_Thrust
+Hip Thrust (Machine)|W|Machine|GLUTES|HAMSTRINGS|~Barbell_Hip_Thrust
+Hip Thrust (Smith Machine)|W|Machine|GLUTES|HAMSTRINGS|~Barbell_Hip_Thrust
+Glute Bridge|R||||=Butt_Lift_Bridge
+Glute Bridge (Barbell)|W||||=Barbell_Glute_Bridge
+Single Leg Glute Bridge|R||||=Single_Leg_Glute_Bridge
+Glute Kickback (Machine)|W|Machine|GLUTES|HAMSTRINGS|~Glute_Kickback
+Glute Kickback (Cable)|W||||=One-Legged_Cable_Kickback
+Cable Pull Through|W||||=Pull_Through
+Hip Abduction (Machine)|W||||=Thigh_Abductor
+Hip Adduction (Machine)|W||||=Thigh_Adductor
+Hip Adduction (Cable)|W||||=Cable_Hip_Adduction
+Standing Calf Raise (Machine)|W||||=Standing_Calf_Raises
+Standing Calf Raise (Dumbbell)|W||||=Standing_Dumbbell_Calf_Raise
+Standing Calf Raise (Barbell)|W||||=Standing_Barbell_Calf_Raise
+Standing Calf Raise (Smith Machine)|W||||=Smith_Machine_Calf_Raise
+Seated Calf Raise|W||||=Seated_Calf_Raise
+Calf Press (Machine)|W||||=Calf_Press_On_The_Leg_Press_Machine
+Sissy Squat (Weighted)|W||||=Weighted_Sissy_Squat
+Nordic Hamstrings Curls|R||||=Natural_Glute_Ham_Raise
+Glute Ham Raise|R||||=Glute_Ham_Raise
+Reverse Hyperextension|W||||=Reverse_Hyperextension
+Kettlebell Swing|W|Kettlebell|GLUTES|HAMSTRINGS,LOWER_BACK,FRONT_DELTS|~One-Arm_Kettlebell_Swings
+Jump Squat|R||||=Freehand_Jump_Squat
+Box Jump|R|Other|QUADS|GLUTES,CALVES|~Box_Jump_Multiple_Response
+# Core
+Crunch|R||||=Crunches
+Crunch (Machine)|W||||=Ab_Crunch_Machine
+Cable Crunch|W||||=Cable_Crunch
+Crunch (Weighted)|W||||=Weighted_Crunches
+Sit Up|R||||=Sit-Up
+Decline Crunch|R||||=Decline_Crunch
+Bicycle Crunch|R||||=Air_Bike
+Hanging Leg Raise|R||||=Hanging_Leg_Raise
+Hanging Knee Raise|R|Bodyweight|ABS|OBLIQUES|~Hanging_Leg_Raise
+Knee Raise Parallel Bars|R||||=Knee_Hip_Raise_On_Parallel_Bars
+Lying Leg Raise|R||||=Flat_Bench_Lying_Leg_Raise
+Leg Raise|R||||=Leg_Lift
+Toes to Bar|R||||=Hanging_Pike
+V Up|R||||=Jackknife_Sit-Up
+Plank|D||||=Plank
+Side Plank|D||||=Side_Bridge
+Russian Twist (Bodyweight)|R||||=Russian_Twist
+Russian Twist (Weighted)|W|Other|OBLIQUES|ABS|~Russian_Twist
+Ab Wheel|R||||=Ab_Roller
+Dead Bug|R||||=Dead_Bug
+Reverse Crunch|R||||=Reverse_Crunch
+Oblique Crunch|R||||=Oblique_Crunches
+Flutter Kicks|R||||=Flutter_Kicks
+Side Bend (Dumbbell)|W||||=Dumbbell_Side_Bend
+Cable Twist (Up to down)|W||||=Standing_Cable_Wood_Chop
+Cable Twist (Down to up)|W||||=Standing_Cable_Lift
+Pallof Press|W||||=Pallof_Press
+Rope Crunch (Cable)|W||||=Rope_Crunch
+Mountain Climber|R|Bodyweight|ABS|QUADS,FRONT_DELTS|~Spider_Crawl
+# Cardio
+Treadmill|C||||=Running_Treadmill
+Running|C|None|QUADS|HAMSTRINGS,CALVES,GLUTES|~Jogging_Treadmill
+Walking|C||||=Walking_Treadmill
+Cycling|C||||=Bicycling
+Spinning|C||||=Bicycling_Stationary
+Recumbent Bike|C||||=Recumbent_Bike
+Air Bike|C|Machine|QUADS|HAMSTRINGS,CALVES,GLUTES|~Bicycling_Stationary
+Elliptical Trainer|C||||=Elliptical_Trainer
+Rowing Machine|C||||=Rowing_Stationary
+Stair Machine|D||||=Stairmaster
+Stepmill|D||||=Step_Mill
+Jump Rope|D||||=Rope_Jumping
+Battle Ropes|D||||=Battling_Ropes
+Swimming|C|None|LATS|FRONT_DELTS,TRICEPS,QUADS|
+Hiking|C|None|QUADS|GLUTES,CALVES,HAMSTRINGS|~Trail_Running_Walking

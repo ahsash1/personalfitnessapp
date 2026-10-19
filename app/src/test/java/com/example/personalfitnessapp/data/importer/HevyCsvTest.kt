@@ -42,3 +42,24 @@ class HevyCsvTest {
         assertEquals(45.359237, set.weightKg!!, 1e-6)
     }
 }
+
+class OwnerExportTest {
+    @Test
+    fun `the bundled Hevy export parses and every exercise maps to a catalog exercise by name`() {
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        val raw = json.decodeFromString<List<com.example.personalfitnessapp.data.seed.RawExerciseDto>>(
+            java.io.File("src/main/assets/seed/free_exercise_db_v1.json").readText()
+        )
+        val catalog = com.example.personalfitnessapp.data.seed.HevyCatalog.apply(
+            raw.map { com.example.personalfitnessapp.data.seed.ExerciseSeedMapper.toEntity(it) },
+            com.example.personalfitnessapp.data.seed.HevyCatalog.parse(java.io.File("src/main/assets/seed/hevy_catalog.txt").readText()),
+        )
+        val workouts = HevyCsv.parse(java.io.File("src/main/assets/seed/owner_hevy_export.csv").readText(), ZoneOffset.UTC)
+        assertEquals(13, workouts.size)
+        assertEquals(146, workouts.sumOf { w -> w.exercises.sumOf { it.sets.size } })
+        workouts.flatMap { it.exercises }.map { it.name }.distinct().forEach { name ->
+            assertEquals(name, ExerciseNameMatcher.match(name, catalog)?.name)
+        }
+        assertEquals(1, catalog.count { it.name == "Incline Bench Press (Dumbbell)" })
+    }
+}

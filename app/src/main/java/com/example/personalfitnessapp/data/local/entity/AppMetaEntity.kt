@@ -12,4 +12,5 @@ data class AppMetaEntity(
 
 object AppMetaKeys {
     const val EXERCISE_SEED_VERSION = "exercise_seed_version"
+    const val BUNDLED_IMPORT_DONE = "bundled_import_done"
 }

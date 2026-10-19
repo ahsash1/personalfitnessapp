@@ -75,4 +75,13 @@ class ExerciseFilterTest {
             ExerciseFilter.apply(all, "bench", Muscle.QUADS, null),
         )
     }
+
+    @Test
+    fun `words match in any order with gym shorthand`() {
+        val incline = exercise("4", "Incline Bench Press (Dumbbell)", aliases = listOf("Incline Dumbbell Press"), equipment = "Dumbbell")
+        val list = all + incline
+        assertEquals(listOf(incline), ExerciseFilter.apply(list, "dumbbell incline bench press", null, null))
+        assertEquals(listOf(incline), ExerciseFilter.apply(list, "db incline", null, null))
+        assertEquals(listOf(squat), ExerciseFilter.apply(list, "squats", null, null))
+    }
 }

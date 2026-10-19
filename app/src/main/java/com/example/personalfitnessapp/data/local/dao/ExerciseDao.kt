@@ -5,15 +5,18 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import androidx.room.Upsert
 import com.example.personalfitnessapp.data.local.entity.ExerciseEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ExerciseDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    // @Upsert updates in place. REPLACE would delete + re-insert, and the CASCADE foreign keys
+    // on set_logs / session_exercises / routine_exercises would wipe the user's history.
+    @Upsert
     suspend fun upsertAll(exercises: List<ExerciseEntity>)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun upsert(exercise: ExerciseEntity)
 
     @Update
