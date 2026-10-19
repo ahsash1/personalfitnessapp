@@ -242,15 +242,17 @@ private fun BurnedCard(day: DayNutrition, status: HealthStatus, onConnect: () ->
             }
             BurnRow("Resting (BMR, full day)", burn.resting)
             BurnRow("Digesting food (10% of eaten)", burn.digestion)
-            BurnRow(
-                when (burn.activitySource) {
-                    DailyEnergy.ActivitySource.HEALTH_ACTIVE_CALORIES -> "Daily activity · ${burn.steps?.let { "%,d steps".format(Locale.US, it) } ?: "Samsung Health"}"
-                    DailyEnergy.ActivitySource.STEPS -> "Daily activity · ${"%,d".format(Locale.US, burn.steps ?: 0)} steps"
-                    DailyEnergy.ActivitySource.ESTIMATE -> "Daily activity · estimated (no phone data)"
-                    DailyEnergy.ActivitySource.NONE -> "Daily activity · not connected"
-                },
-                burn.activity,
-            )
+            when (burn.activitySource) {
+                DailyEnergy.ActivitySource.HEALTH_ACTIVE_CALORIES ->
+                    BurnRow("Daily activity · Samsung Health${burn.steps?.let { " · %,d steps".format(Locale.US, it) } ?: ""}", burn.activity)
+                DailyEnergy.ActivitySource.STEPS -> {
+                    val everyday = DailyEnergy.everydayMovement(burn.resting)
+                    BurnRow("Everyday movement (sitting, standing, chores)", everyday)
+                    BurnRow("Walking · ${"%,d".format(Locale.US, burn.steps ?: 0)} steps", burn.activity - everyday)
+                }
+                DailyEnergy.ActivitySource.ESTIMATE -> BurnRow("Everyday movement · steps not connected", burn.activity)
+                DailyEnergy.ActivitySource.NONE -> BurnRow("Daily activity · not connected", burn.activity)
+            }
             day.workouts.forEach { w -> BurnRow("${w.title} · ${WorkoutFormat.finishedDuration(w.durationSec)}", (w.kcal ?: 0).toDouble()) }
             if (day.workouts.isEmpty()) BurnRow("Workouts", 0.0)
             val balance = DailyEnergy.balance(day.eatenKcal, burn)

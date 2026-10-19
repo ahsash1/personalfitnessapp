@@ -142,12 +142,14 @@ class NutritionViewModel @Inject constructor(
         val week = all.filter { it.startedAt >= weekStart.toEpochMilli() && it.startedAt < start.toEpochMilli() }
         val weekHealth = health.activity(weekStart, start, week.windows())
         val s = stats.value ?: bodySourceFallback()
-        val weekActivity = when {
-            weekHealth.activeKcal != null && weekHealth.activeKcal > 0 -> weekHealth.activeKcal / 7
-            weekHealth.steps != null && s != null -> EnergyMath.stepsKcal(weekHealth.steps, s.weightKg, s.heightCm, s.sex) / 7
-            // No phone data yet: assume a sedentary day's movement.
-            s != null -> s.bmr * DailyEnergy.SEDENTARY_ACTIVITY_FRACTION
-            else -> null
+        // Per-day average, same rule as a single day (no phone data yet = everyday movement only).
+        val weekActivity = s?.let {
+            DailyEnergy.activity(
+                bmr = it.bmr,
+                healthActiveKcal = weekHealth.activeKcal?.div(7),
+                healthSteps = weekHealth.steps?.div(7),
+                stepsToKcal = { st -> EnergyMath.stepsKcal(st, it.weightKg, it.heightCm, it.sex) },
+            ).first
         }
         _weekAverage.value = weekActivity?.let { it to week.sumOf { w -> (w.kcal ?: 0).toDouble() } / 7 }
         tracker.closeFinishedDays()

@@ -4,16 +4,18 @@ import kotlin.math.roundToInt
 
 /**
  * A day's calories in and out. Total burned = resting (Mifflin-St Jeor) + digestion (thermic
- * effect of food, ~10% of what was eaten) + daily activity (Samsung Health active calories, or
- * steps when only steps are available; both with logged-workout windows removed) + logged
- * workouts (app estimate). Each piece is counted once.
+ * effect of food, ~10% of what was eaten) + daily activity + logged workouts (app estimate).
+ * Daily activity is the larger of Samsung Health's active calories and (everyday movement +
+ * walking from steps), both with logged-workout windows removed, so each piece is counted once.
  */
 object DailyEnergy {
     const val THERMIC_EFFECT = 0.10
 
     /**
-     * Everyday movement assumed when the phone has no data: ~25% of resting energy, the low end of a
-     * sedentary day (physical activity level ~1.4 = resting + digestion + this).
+     * Everyday movement a step counter can't see (sitting ~1.3 MET, standing about and chores
+     * ~2 MET in the 2024 Compendium, over a normal waking day): ~25% of resting energy. On its own
+     * it puts a step-free day at a physical activity level of ~1.4, the bottom of the sedentary
+     * range (FAO/WHO/UNU 2004). Walking from steps is added on top.
      */
     const val SEDENTARY_ACTIVITY_FRACTION = 0.25
 
@@ -39,13 +41,36 @@ object DailyEnergy {
         workoutsKcal: Double,
         estimateWhenMissing: Boolean = true,
     ): Burn {
-        val (activity, source) = when {
-            healthActiveKcal != null && healthActiveKcal > 0 -> healthActiveKcal to ActivitySource.HEALTH_ACTIVE_CALORIES
-            healthSteps != null -> stepsToKcal(healthSteps) to ActivitySource.STEPS
-            estimateWhenMissing -> bmr * SEDENTARY_ACTIVITY_FRACTION to ActivitySource.ESTIMATE
+        val (activity, source) = activity(bmr, healthActiveKcal, healthSteps, stepsToKcal, estimateWhenMissing)
+        return Burn(bmr, eatenKcal * THERMIC_EFFECT, activity, source, healthSteps, workoutsKcal)
+    }
+
+    /** Everyday movement a step counter misses. */
+    fun everydayMovement(bmr: Double): Double = bmr * SEDENTARY_ACTIVITY_FRACTION
+
+    /**
+     * Non-workout activity. A phone's step count (and Samsung's phone-only active calories) only see
+     * walking, so they sit on top of [everydayMovement]. A watch's active calories already cover
+     * all movement, so they're used alone when they come out higher. Taking the larger of the two
+     * never counts the same movement twice.
+     */
+    fun activity(
+        bmr: Double,
+        healthActiveKcal: Double?,
+        healthSteps: Long?,
+        stepsToKcal: (Long) -> Double,
+        estimateWhenMissing: Boolean = true,
+    ): Pair<Double, ActivitySource> {
+        val base = everydayMovement(bmr)
+        val fromSteps = healthSteps?.let { base + stepsToKcal(it) }
+        val active = healthActiveKcal?.takeIf { it > 0 }
+        return when {
+            active != null && (fromSteps == null || active > fromSteps) -> active to ActivitySource.HEALTH_ACTIVE_CALORIES
+            fromSteps != null -> fromSteps to ActivitySource.STEPS
+            active != null -> active to ActivitySource.HEALTH_ACTIVE_CALORIES
+            estimateWhenMissing -> base to ActivitySource.ESTIMATE
             else -> 0.0 to ActivitySource.NONE
         }
-        return Burn(bmr, eatenKcal * THERMIC_EFFECT, activity, source, healthSteps, workoutsKcal)
     }
 
     /**

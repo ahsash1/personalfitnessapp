@@ -32,8 +32,9 @@ Built in Hevy's visual language. What was assumed:
   and active calories recorded during a logged workout are subtracted so they aren't counted twice.
   Daily balance card: last 7 finished days as bars (eaten − burned; below the line = deficit),
   each locked in after midnight and re-checked for 48 h for late Samsung Health syncs; days with
-  no food logged get no number. With no phone data, daily activity is estimated at 25% of
-  resting energy (sedentary) rather than zero. Photo logging: the photo shows first with an
+  no food logged get no number. Daily activity = everyday movement a step counter can't see
+  (25% of resting energy: sitting/standing/chores) + walking from steps, or Samsung's active
+  calories when those are higher (a watch covers all movement); never both. Photo logging: the photo shows first with an
   optional notes box ("fried in butter", "ate half"); the AI runs on "Estimate" and the notes
   override what the photo seems to show. Tapping an estimated item opens an editor where
   changing grams rescales calories and macros.

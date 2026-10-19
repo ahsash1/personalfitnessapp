@@ -7,17 +7,31 @@ class DailyEnergyTest {
     private val steps = { s: Long -> EnergyMath.stepsKcal(s, 65.0, 173.0, EnergyMath.Sex.MALE) }
 
     @Test
-    fun `Samsung active calories win over steps, and nothing is counted twice`() {
-        val b = DailyEnergy.burn(1646.0, 2000.0, healthActiveKcal = 320.0, healthSteps = 8000, stepsToKcal = steps, workoutsKcal = 250.0)
+    fun `a watch's all-day active calories win when higher, and nothing is counted twice`() {
+        val b = DailyEnergy.burn(1646.0, 2000.0, healthActiveKcal = 750.0, healthSteps = 8000, stepsToKcal = steps, workoutsKcal = 250.0)
         assertEquals(DailyEnergy.ActivitySource.HEALTH_ACTIVE_CALORIES, b.activitySource)
-        assertEquals(1646.0 + 200.0 + 320.0 + 250.0, b.total, 0.01)
+        assertEquals(1646.0 + 200.0 + 750.0 + 250.0, b.total, 0.01)
     }
 
     @Test
-    fun `steps are used when there are no active calories`() {
+    fun `steps add walking on top of everyday movement`() {
         val b = DailyEnergy.burn(1646.0, 0.0, healthActiveKcal = null, healthSteps = 8000, stepsToKcal = steps, workoutsKcal = 0.0)
         assertEquals(DailyEnergy.ActivitySource.STEPS, b.activitySource)
-        assertEquals(186.6, b.activity, 0.5)
+        assertEquals(1646.0 * 0.25 + 186.6, b.activity, 0.5)
+    }
+
+    @Test
+    fun `phone-only active calories that just mirror walking don't drop everyday movement`() {
+        val b = DailyEnergy.burn(1646.0, 0.0, healthActiveKcal = 200.0, healthSteps = 8000, stepsToKcal = steps, workoutsKcal = 0.0)
+        assertEquals(DailyEnergy.ActivitySource.STEPS, b.activitySource)
+        assertEquals(1646.0 * 0.25 + 186.6, b.activity, 0.5)
+    }
+
+    @Test
+    fun `a sedentary step-free day sits at an activity level of about 1·4`() {
+        val bmr = 1625.0
+        val t = DailyEnergy.target(bmr, avgActivity = DailyEnergy.everydayMovement(bmr), avgWorkouts = 0.0, offset = 0)
+        assertEquals(1.4, t / bmr, 0.03)
     }
 
     @Test
