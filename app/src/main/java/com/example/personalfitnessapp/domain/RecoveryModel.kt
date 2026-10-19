@@ -4,19 +4,18 @@ import com.example.personalfitnessapp.data.local.entity.ExerciseEntity
 import com.example.personalfitnessapp.data.local.entity.ExperienceLevel
 import com.example.personalfitnessapp.data.local.entity.SetLogEntity
 import com.example.personalfitnessapp.data.model.Muscle
-import kotlin.math.ln
-import kotlin.math.pow
 
 enum class RecoveryStatus { READY, RECOVERING, FATIGUED }
 
 data class MuscleRecovery(
     val muscle: Muscle,
     val status: RecoveryStatus,
+    /** Working sets from the limiting session, scaled by how much of its window is left. */
     val fatigueScore: Double,
     val lastTrainedAt: Long?,
-    /** 1.0 = ready; below that, how far fatigue has decayed toward the ready line. */
+    /** Share of the current recovery window already elapsed; 1.0 = ready. */
     val readyFraction: Double = 1.0,
-    /** Hours until fatigue decays to the ready line (0 when ready). */
+    /** Hours left in the recovery window (0 when ready). */
     val hoursUntilReady: Double = 0.0,
 )
 
@@ -27,9 +26,10 @@ data class RecoverySetInput(val setLog: SetLogEntity, val exercise: ExerciseEnti
 data class MuscleVolumeSummary(val setCount: Int, val totalVolumeKg: Float)
 
 /**
- * Computes per-muscle fatigue: each set contributes stimulus to
- * its primary muscles at full weight and secondary muscles at half, decaying
- * exponentially since it was completed. Pure and deterministic - no AI.
+ * Per-muscle readiness from the evidence in [RecoveryConstants]: each session that worked a
+ * muscle makes it ready again at sessionEnd + baseline hours x volume factor x experience. The
+ * latest such time wins. Warm-up sets and cardio don't count; a set counts fully for its primary
+ * muscles and half for secondary ones. Pure and deterministic - no AI.
  */
 object RecoveryModel {
     fun compute(
@@ -40,51 +40,52 @@ object RecoveryModel {
         computeForMuscle(muscle, sets, experienceLevel, nowEpochMillis)
     }
 
+    private class SessionLoad(val endedAt: Long, val effectiveSets: Double)
+
     private fun computeForMuscle(
         muscle: Muscle,
         sets: List<RecoverySetInput>,
         experienceLevel: ExperienceLevel,
         nowEpochMillis: Long,
     ): MuscleRecovery {
-        val baselineHours = RecoveryConstants.baselineHours(muscle) *
-            RecoveryConstants.experienceMultiplier(experienceLevel)
-        val halfLifeHours = baselineHours * RecoveryConstants.HALF_LIFE_FRACTION_OF_BASELINE
-
-        var totalStimulus = 0.0
-        var lastTrainedAt: Long? = null
-
-        for (input in sets) {
-            val role = muscleRole(muscle, input.exercise) ?: continue
-            val hoursAgo = (nowEpochMillis - input.setLog.completedAt) / 3_600_000.0
-            if (hoursAgo < 0) continue
-
-            val rawLoad = (input.setLog.weightKg + RecoveryConstants.BODYWEIGHT_LOAD_PROXY_KG) * input.setLog.reps
-            val setUnits = rawLoad / RecoveryConstants.REFERENCE_SET_LOAD
-            val decay = 0.5.pow(hoursAgo / halfLifeHours)
-
-            totalStimulus += setUnits * role * decay
-            if (lastTrainedAt == null || input.setLog.completedAt > lastTrainedAt) {
-                lastTrainedAt = input.setLog.completedAt
-            }
+        val loads = sets.mapNotNull { input ->
+            val role = muscleRole(muscle, input.exercise) ?: return@mapNotNull null
+            if (!counts(input) || input.setLog.completedAt > nowEpochMillis) return@mapNotNull null
+            input to role
+        }.groupBy { it.first.setLog.sessionId }.values.map { group ->
+            SessionLoad(group.maxOf { it.first.setLog.completedAt }, group.sumOf { it.second })
         }
+        if (loads.isEmpty()) return MuscleRecovery(muscle, RecoveryStatus.READY, 0.0, null)
 
+        // The session whose recovery window ends last decides readiness.
+        val baseline = RecoveryConstants.baselineHours(muscle) * RecoveryConstants.experienceMultiplier(experienceLevel)
+        val binding = loads.maxBy { it.endedAt + hoursToMillis(baseline * RecoveryConstants.volumeFactor(it.effectiveSets)) }
+        val windowHours = baseline * RecoveryConstants.volumeFactor(binding.effectiveSets)
+        val elapsedHours = (nowEpochMillis - binding.endedAt) / 3_600_000.0
+        val fraction = if (windowHours <= 0) 1.0 else (elapsedHours / windowHours).coerceIn(0.0, 1.0)
         val status = when {
-            totalStimulus >= RecoveryConstants.FATIGUED_THRESHOLD -> RecoveryStatus.FATIGUED
-            totalStimulus >= RecoveryConstants.READY_THRESHOLD -> RecoveryStatus.RECOVERING
-            else -> RecoveryStatus.READY
+            fraction >= 1.0 -> RecoveryStatus.READY
+            fraction < RecoveryConstants.FATIGUED_BELOW_FRACTION -> RecoveryStatus.FATIGUED
+            else -> RecoveryStatus.RECOVERING
         }
-
-        // Every set decays with the same half-life, so the total does too.
-        val over = totalStimulus / RecoveryConstants.READY_THRESHOLD
         return MuscleRecovery(
             muscle = muscle,
             status = status,
-            fatigueScore = totalStimulus,
-            lastTrainedAt = lastTrainedAt,
-            readyFraction = if (over <= 1.0) 1.0 else 1.0 / over,
-            hoursUntilReady = if (over <= 1.0) 0.0 else halfLifeHours * ln(over) / ln(2.0),
+            fatigueScore = binding.effectiveSets * (1 - fraction),
+            lastTrainedAt = loads.maxOf { it.endedAt },
+            readyFraction = fraction,
+            hoursUntilReady = (windowHours - elapsedHours).coerceAtLeast(0.0),
         )
     }
+
+    /** Warm-ups and cardio/timed work don't create recovery debt worth tracking. */
+    private fun counts(input: RecoverySetInput): Boolean {
+        if (input.setLog.type == com.example.personalfitnessapp.data.local.entity.SetType.WARMUP) return false
+        val type = com.example.personalfitnessapp.domain.workout.ExerciseTypes.of(input.exercise)
+        return type != com.example.personalfitnessapp.data.local.entity.ExerciseType.DISTANCE_DURATION
+    }
+
+    private fun hoursToMillis(hours: Double) = (hours * 3_600_000).toLong()
 
     /** Raw (non-decayed) set count and volume where [muscle] is a primary target - the
      * "3 sets, 180 kg total" a person can actually picture, as opposed to [MuscleRecovery]'s

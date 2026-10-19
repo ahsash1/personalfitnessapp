@@ -4,55 +4,71 @@ import com.example.personalfitnessapp.data.local.entity.ExperienceLevel
 import com.example.personalfitnessapp.data.model.Muscle
 
 /**
- * All tunable knobs for the recovery/fatigue model live here so
- * they're easy to find and adjust in one place.
+ * Tunable knobs for the recovery model, with the evidence they come from:
+ *
+ * - Belcher et al. 2019 (Appl Physiol Nutr Metab 44:1033, PMID 30779596): well-trained men,
+ *   4 sets to failure at 80% 1RM. Bench press bar speed was down only immediately after the
+ *   session; squat bar speed stayed down for up to 72 h; deadlift showed no drop.
+ * - Morán-Navarro et al. 2017 (Eur J Appl Physiol 117:2387, PMID 28965198): sets stopped short of
+ *   failure had recovered by ~24 h; the same work taken to failure needed up to 24-48 h more.
+ * - Sousa et al. 2024 review (J Hum Kinet 91:205, PMID 38689583): lower-body, multi-joint,
+ *   eccentric/lengthened work, failure and higher volume lengthen recovery; volume's effect is
+ *   modest and individual variation is wide.
+ * - MacDougall et al. 1995 (Can J Appl Physiol 20:480, PMID 8563679): the protein-synthesis rise
+ *   after 12 hard sets for the biceps is nearly gone by 36 h.
+ *
+ * Hours below are for a typical hard session (about 6 working sets near failure). They sit at
+ * the conservative end of those findings because the app doesn't know how close to failure each
+ * set was.
  */
 object RecoveryConstants {
-    /** Smaller muscle groups recover in ~48h; everything else in [LARGE_MUSCLES] takes ~72h. */
-    const val SMALL_MUSCLE_BASELINE_HOURS = 48.0
-    const val LARGE_MUSCLE_BASELINE_HOURS = 72.0
+    /** Squat-pattern muscles: the slowest to recover in the studies above (up to 72 h). */
+    const val LOWER_BODY_HOURS = 72.0
+    val LOWER_BODY = setOf(Muscle.QUADS, Muscle.GLUTES, Muscle.HAMSTRINGS, Muscle.HIP_ADDUCTORS)
 
-    val LARGE_MUSCLES = setOf(
-        Muscle.QUADS, Muscle.GLUTES, Muscle.HAMSTRINGS,
-        Muscle.LATS, Muscle.UPPER_BACK, Muscle.LOWER_BACK, Muscle.CHEST,
+    /** Small muscles and isolation work: back to baseline within ~36 h. */
+    const val SMALL_MUSCLE_HOURS = 36.0
+    val SMALL_MUSCLES = setOf(
+        Muscle.BICEPS, Muscle.TRICEPS, Muscle.FOREARMS, Muscle.CALVES,
+        Muscle.ABS, Muscle.OBLIQUES, Muscle.HIP_ABDUCTORS,
     )
 
-    fun baselineHours(muscle: Muscle): Double =
-        if (muscle in LARGE_MUSCLES) LARGE_MUSCLE_BASELINE_HOURS else SMALL_MUSCLE_BASELINE_HOURS
+    /** Everything else (chest, back, shoulders, traps, lower back): within 24-48 h, so 48 h. */
+    const val UPPER_BODY_HOURS = 48.0
 
-    /** Modest experience adjustment: more experienced lifters recover a bit faster. */
+    fun baselineHours(muscle: Muscle): Double = when (muscle) {
+        in LOWER_BODY -> LOWER_BODY_HOURS
+        in SMALL_MUSCLES -> SMALL_MUSCLE_HOURS
+        else -> UPPER_BODY_HOURS
+    }
+
+    /** Trained lifters show less damage from familiar work (repeated-bout effect). */
     fun experienceMultiplier(level: ExperienceLevel): Double = when (level) {
-        ExperienceLevel.BEGINNER -> 1.1
+        ExperienceLevel.BEGINNER -> 1.15
         ExperienceLevel.INTERMEDIATE -> 1.0
         ExperienceLevel.ADVANCED -> 0.9
     }
 
-    /** Secondary-muscle sets count at about half the stimulus of primary ones. */
+    /** A set where the muscle is only a helper counts as half a set for it. */
     const val SECONDARY_MUSCLE_WEIGHT = 0.5
 
-    /**
-     * A set's raw "load" is (weight + this bodyweight proxy) x reps, so bodyweight
-     * sets (weightKg = 0) still register meaningful stimulus instead of zero.
-     */
-    const val BODYWEIGHT_LOAD_PROXY_KG = 40.0
-
-    /** One reference working set (60kg x 8) is defined as exactly 1.0 stimulus unit. */
-    const val REFERENCE_SET_LOAD = 60.0 * 8
+    /** Session size that the baseline hours describe. */
+    const val TYPICAL_SESSION_SETS = 6.0
 
     /**
-     * Exponential decay half-life, as a fraction of the muscle's baseline recovery
-     * time. 1/3 means a fresh set has decayed to 0.5^3 = 12.5% of its stimulus by
-     * the time [baselineHours] has elapsed - which is also where the READY
-     * threshold sits below, so "roughly baselineHours" lines up with feeling ready.
+     * Volume only nudges recovery (Sousa 2024): each set beyond or short of a typical session
+     * moves it by 5%, from 0.85x at 3 sets to a cap of 1.25x (11+ sets). Under 2 sets the muscle
+     * was barely worked and recovery scales down toward zero.
      */
-    const val HALF_LIFE_FRACTION_OF_BASELINE = 1.0 / 3.0
+    fun volumeFactor(effectiveSets: Double): Double = when {
+        effectiveSets <= 0.0 -> 0.0
+        effectiveSets < 2.0 -> effectiveSets / 2.0 * volumeFactor(2.0)
+        else -> (1.0 + (effectiveSets - TYPICAL_SESSION_SETS) * 0.05).coerceIn(0.75, 1.25)
+    }
 
-    /** At or above this cumulative stimulus (in reference-set units), a muscle is FATIGUED. */
-    const val FATIGUED_THRESHOLD = 1.0
+    /** Below this share of its recovery window a muscle shows as fatigued, above it as recovering. */
+    const val FATIGUED_BELOW_FRACTION = 0.5
 
-    /** Below this, a muscle is READY; in between, it's RECOVERING. */
-    const val READY_THRESHOLD = 0.15
-
-    /** Sets older than this are assumed to have decayed to ~0 and are ignored. */
-    const val LOOKBACK_DAYS = 10L
+    /** Older sessions can't still be limiting (longest window is 72 h x 1.25 x 1.15 ~ 104 h). */
+    const val LOOKBACK_DAYS = 6L
 }

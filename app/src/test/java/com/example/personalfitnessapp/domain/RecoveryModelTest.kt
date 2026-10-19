@@ -35,8 +35,8 @@ class RecoveryModelTest {
         formGuideAiGenerated = false,
     )
 
-    private fun setLog(weight: Float, reps: Int, hoursAgo: Double) = SetLogEntity(
-        sessionId = 1,
+    private fun setLog(weight: Float, reps: Int, hoursAgo: Double, session: Long = 1) = SetLogEntity(
+        sessionId = session,
         exerciseId = "x",
         setIndex = 0,
         weightKg = weight,
@@ -92,18 +92,19 @@ class RecoveryModelTest {
     }
 
     @Test
-    fun `a large muscle needs longer than 48h to reach the same recovery as a small one`() {
-        val chestEx = exercise(primary = listOf(Muscle.CHEST))
+    fun `legs take longer than arms after the same session`() {
+        val quadsEx = exercise(primary = listOf(Muscle.QUADS))
         val bicepsEx = exercise(primary = listOf(Muscle.BICEPS))
-        val chestAt48h = statusOf(listOf(RecoverySetInput(setLog(60f, 8, hoursAgo = 48.0), chestEx)), Muscle.CHEST)
-        val bicepsAt48h = statusOf(listOf(RecoverySetInput(setLog(60f, 8, hoursAgo = 48.0), bicepsEx)), Muscle.BICEPS)
-        assertTrue(chestAt48h.fatigueScore > bicepsAt48h.fatigueScore)
+        val quads = statusOf(List(6) { RecoverySetInput(setLog(60f, 8, hoursAgo = 48.0), quadsEx) }, Muscle.QUADS)
+        val biceps = statusOf(List(6) { RecoverySetInput(setLog(20f, 8, hoursAgo = 48.0), bicepsEx) }, Muscle.BICEPS)
+        assertEquals(RecoveryStatus.READY, biceps.status)
+        assertEquals(24.0, quads.hoursUntilReady, 0.01)
     }
 
     @Test
     fun `advanced lifters recover modestly faster than beginners`() {
         val ex = exercise(primary = listOf(Muscle.QUADS))
-        val sets = listOf(RecoverySetInput(setLog(100f, 8, hoursAgo = 60.0), ex))
+        val sets = List(6) { RecoverySetInput(setLog(100f, 8, hoursAgo = 40.0), ex) }
         val beginner = statusOf(sets, Muscle.QUADS, ExperienceLevel.BEGINNER)
         val advanced = statusOf(sets, Muscle.QUADS, ExperienceLevel.ADVANCED)
         assertTrue(advanced.fatigueScore < beginner.fatigueScore)
@@ -133,7 +134,8 @@ class RecoveryModelTest {
             List(3) { RecoverySetInput(setLog(40f, 12, hoursAgo = 1.0), ex) },
             Muscle.CALVES,
         )
-        assertEquals(oneSet.fatigueScore * 3, threeSets.fatigueScore, 0.001)
+        assertTrue(threeSets.fatigueScore > oneSet.fatigueScore)
+        assertTrue(threeSets.hoursUntilReady > oneSet.hoursUntilReady)
     }
 
     @Test
@@ -155,5 +157,52 @@ class RecoveryModelTest {
         val summary = RecoveryModel.volumeSummary(Muscle.HAMSTRINGS, emptyList())
         assertEquals(0, summary.setCount)
         assertEquals(0f, summary.totalVolumeKg, 0.01f)
+    }
+
+    // Evidence-based expectations (sources in RecoveryConstants).
+
+    @Test
+    fun `nine hard chest sets are ready about 55 hours later, not days on end`() {
+        // Example: incline DB press, decline machine press, machine fly, 3 sets each.
+        val ex = exercise(primary = listOf(Muscle.CHEST))
+        val fresh = statusOf(List(9) { RecoverySetInput(setLog(20f, 15, hoursAgo = 0.0), ex) }, Muscle.CHEST)
+        assertEquals(48.0 * 1.15, fresh.hoursUntilReady, 0.01)
+        val fourDaysLater = statusOf(List(9) { RecoverySetInput(setLog(20f, 15, hoursAgo = 96.0), ex) }, Muscle.CHEST)
+        assertEquals(RecoveryStatus.READY, fourDaysLater.status)
+    }
+
+    @Test
+    fun `reps and load don't change recovery, sets do`() {
+        val ex = exercise(primary = listOf(Muscle.CHEST))
+        val light = statusOf(List(4) { RecoverySetInput(setLog(10f, 20, hoursAgo = 1.0), ex) }, Muscle.CHEST)
+        val heavy = statusOf(List(4) { RecoverySetInput(setLog(120f, 5, hoursAgo = 1.0), ex) }, Muscle.CHEST)
+        assertEquals(light.hoursUntilReady, heavy.hoursUntilReady, 0.001)
+    }
+
+    @Test
+    fun `volume nudges recovery but is capped`() {
+        val ex = exercise(primary = listOf(Muscle.QUADS))
+        fun hours(n: Int) = statusOf(List(n) { RecoverySetInput(setLog(100f, 8, hoursAgo = 0.0), ex) }, Muscle.QUADS).hoursUntilReady
+        assertEquals(72.0, hours(6), 0.01)
+        assertEquals(72.0 * 0.85, hours(3), 0.01)
+        assertEquals(72.0 * 1.25, hours(20), 0.01)
+    }
+
+    @Test
+    fun `warm-ups and cardio add no recovery debt`() {
+        val press = exercise(primary = listOf(Muscle.CHEST))
+        val warmup = setLog(40f, 10, hoursAgo = 1.0).copy(setType = com.example.personalfitnessapp.data.local.entity.SetType.WARMUP)
+        assertEquals(RecoveryStatus.READY, statusOf(listOf(RecoverySetInput(warmup, press)), Muscle.CHEST).status)
+        val treadmill = exercise(primary = listOf(Muscle.QUADS)).copy(exerciseType = com.example.personalfitnessapp.data.local.entity.ExerciseType.DISTANCE_DURATION)
+        assertEquals(RecoveryStatus.READY, statusOf(listOf(RecoverySetInput(setLog(0f, 0, hoursAgo = 1.0), treadmill)), Muscle.QUADS).status)
+    }
+
+    @Test
+    fun `the session whose window ends last decides`() {
+        val ex = exercise(primary = listOf(Muscle.CHEST))
+        val sets = List(9) { RecoverySetInput(setLog(20f, 12, hoursAgo = 70.0, session = 1), ex) } +
+            List(3) { RecoverySetInput(setLog(20f, 12, hoursAgo = 10.0, session = 2), ex) }
+        // Session 2 (3 sets, 40.8 h window) ends later than session 1 (55.2 h window, 70 h ago).
+        assertEquals(48.0 * 0.85 - 10.0, statusOf(sets, Muscle.CHEST).hoursUntilReady, 0.01)
     }
 }
