@@ -95,6 +95,8 @@ fun SettingsScreen(
                 Text("AI connection: test which free models answer")
             }
 
+            HevyImportSection()
+
             Text("Weight increments per equipment type", style = MaterialTheme.typography.titleMedium)
             uiState.equipmentIncrements.forEach { increment ->
                 var text by remember(increment.incrementKg) {
