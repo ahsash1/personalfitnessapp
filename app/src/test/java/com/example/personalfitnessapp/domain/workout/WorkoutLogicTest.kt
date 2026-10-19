@@ -113,3 +113,21 @@ class PlateMathTest {
         assertEquals(listOf("20", "25"), PlateMath.warmups(30.0, 2.5, minKg = 20.0).map { it.weight })
     }
 }
+
+class OneRepMaxCapTest {
+    @Test
+    fun `sets over 10 reps don't estimate a 1RM or earn 1RM records`() {
+        assertNull(WorkoutMath.oneRepMaxOrNull(27.5, 30))
+        assertEquals(26.67, WorkoutMath.oneRepMaxOrNull(20.0, 10)!!, 0.01)
+        val sets = listOf(
+            LoggedSet(1, 1, 100, 0, 27.5, 12, SetType.NORMAL),
+            LoggedSet(2, 2, 200, 0, 27.5, 30, SetType.NORMAL),
+        )
+        assertNull(Records.bests(sets).best1RmKg)
+        assertTrue(Records.badges(sets).values.none { PrKind.BEST_1RM in it })
+        val history = Records.bests(listOf(LoggedSet(1, 1, 100, 0, 20.0, 8, SetType.NORMAL)))
+        val prs = WorkoutMath.prsFor("x", DraftSet(weight = "15", reps = "40", completed = true), emptyList(), history, ExerciseType.WEIGHT_REPS)
+        assertTrue(prs.none { it.kind == PrKind.BEST_1RM })
+    }
+}
+

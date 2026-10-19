@@ -27,7 +27,7 @@ object Records {
         val bestVolumeSet = working.maxBy { it.weightKg * it.reps }
         return HistoryBests(
             heaviestKg = working.maxOf { it.weightKg },
-            best1RmKg = working.maxOf { WorkoutMath.oneRepMax(it.weightKg, it.reps) },
+            best1RmKg = working.mapNotNull { WorkoutMath.oneRepMaxOrNull(it.weightKg, it.reps) }.maxOrNull(),
             bestSetVolumeKg = bestVolumeSet.weightKg * bestVolumeSet.reps,
             bestSetVolumeLabel = WorkoutFormat.weightReps(bestVolumeSet.weightKg, bestVolumeSet.reps),
             bestSessionVolumeKg = working.groupBy { it.sessionId }.values.maxOf { s -> s.sumOf { it.weightKg * it.reps } },
@@ -47,19 +47,21 @@ object Records {
         var bestVolume: Double? = null
         for (session in sessions) {
             val topWeight = session.maxBy { it.weightKg }
-            val top1Rm = session.maxBy { WorkoutMath.oneRepMax(it.weightKg, it.reps) }
+            // Only sets of <= 10 reps estimate a 1RM (see WorkoutMath.MAX_REPS_FOR_1RM).
+            val top1Rm = session.mapNotNull { s -> WorkoutMath.oneRepMaxOrNull(s.weightKg, s.reps)?.let { s to it } }.maxByOrNull { it.second }
             val topVolume = session.maxBy { it.weightKg * it.reps }
             if (heaviest != null) {
                 if (topWeight.weightKg > heaviest) result.getOrPut(topWeight.id) { mutableSetOf() } += PrKind.HEAVIEST_WEIGHT
-                if (WorkoutMath.oneRepMax(top1Rm.weightKg, top1Rm.reps) > best1Rm!! + 1e-9) {
-                    result.getOrPut(top1Rm.id) { mutableSetOf() } += PrKind.BEST_1RM
+                if (top1Rm != null && best1Rm != null && top1Rm.second > best1Rm + 1e-9) {
+                    result.getOrPut(top1Rm.first.id) { mutableSetOf() } += PrKind.BEST_1RM
                 }
                 if (topVolume.weightKg * topVolume.reps > bestVolume!! + 1e-9) {
                     result.getOrPut(topVolume.id) { mutableSetOf() } += PrKind.BEST_SET_VOLUME
                 }
             }
             heaviest = maxOf(heaviest ?: 0.0, topWeight.weightKg)
-            best1Rm = maxOf(best1Rm ?: 0.0, WorkoutMath.oneRepMax(top1Rm.weightKg, top1Rm.reps))
+            // A session with no <= 10-rep set still counts as history, so a later valid 1RM can be a record.
+            best1Rm = maxOf(best1Rm ?: 0.0, top1Rm?.second ?: 0.0)
             bestVolume = maxOf(bestVolume ?: 0.0, topVolume.weightKg * topVolume.reps)
         }
         return result

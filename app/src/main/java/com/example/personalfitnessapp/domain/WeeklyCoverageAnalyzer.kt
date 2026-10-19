@@ -35,7 +35,9 @@ object WeeklyCoverageAnalyzer {
             }
         }
 
-        for (muscle in trainedThisWeek) {
+        // Upper-body and small muscles recover within 24-48 h (see RecoveryConstants), so hitting
+        // them on back-to-back days is fine; only lower-body muscles (up to 72 h) get a warning.
+        for (muscle in trainedThisWeek.filter { it in RecoveryConstants.LOWER_BODY }) {
             val trainedDays = ORDERED_DAYS.filter { muscle in (musclesByDay[it] ?: emptySet()) }
             val consecutivePairs = mutableListOf<DayOfWeek>()
             for (i in ORDERED_DAYS.indices) {

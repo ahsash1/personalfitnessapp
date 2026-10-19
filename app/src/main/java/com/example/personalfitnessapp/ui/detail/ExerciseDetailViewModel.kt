@@ -112,9 +112,10 @@ class ExerciseDetailViewModel @Inject constructor(
         return ui.history.filter { it.session.startedAt >= since }.mapNotNull { entry ->
             val working = entry.sets.filter { it.type != SetType.WARMUP }
             if (working.isEmpty()) return@mapNotNull null
-            val value = when (metric) {
+            val value: Double = when (metric) {
                 ChartMetric.HEAVIEST -> working.maxOf { it.weightKg.toDouble() }
-                ChartMetric.ONE_RM -> working.maxOf { WorkoutMath.oneRepMax(it.weightKg.toDouble(), it.reps) }
+                ChartMetric.ONE_RM -> working.mapNotNull { WorkoutMath.oneRepMaxOrNull(it.weightKg.toDouble(), it.reps) }.maxOrNull()
+                    ?: return@mapNotNull null
                 ChartMetric.BEST_SET_VOLUME -> working.maxOf { it.weightKg.toDouble() * it.reps }
                 ChartMetric.SESSION_VOLUME -> working.sumOf { it.weightKg.toDouble() * it.reps }
                 ChartMetric.TOTAL_REPS -> working.sumOf { it.reps }.toDouble()

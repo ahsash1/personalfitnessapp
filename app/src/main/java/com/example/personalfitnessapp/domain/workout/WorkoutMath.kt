@@ -50,6 +50,15 @@ object WorkoutMath {
     /** Epley; 1 rep is the weight itself (docs/02_data_model.md). */
     fun oneRepMax(weightKg: Double, reps: Int): Double = if (reps <= 1) weightKg else weightKg * (1 + reps / 30.0)
 
+    /**
+     * Linear 1RM formulas like Epley shouldn't be fed more than 10 reps (Reynolds et al. 2006,
+     * J Strength Cond Res 20:584, PMID 16937972); a 30-rep pushdown isn't evidence of a 1RM.
+     */
+    const val MAX_REPS_FOR_1RM = 10
+
+    fun oneRepMaxOrNull(weightKg: Double, reps: Int): Double? =
+        if (reps in 1..MAX_REPS_FOR_1RM) oneRepMax(weightKg, reps) else null
+
     /** SET column labels: W for warm-ups (not numbered), F/D letters for failure/drop sets, else 1, 2, 3. */
     fun setLabels(sets: List<DraftSet>): List<String> {
         var n = 0
@@ -145,9 +154,9 @@ object WorkoutMath {
         val bestWeight = max(history.heaviestKg ?: 0.0, earlier.maxOfOrNull { it.first } ?: 0.0)
         if (w > bestWeight) events += PrEvent(exerciseId, PrKind.HEAVIEST_WEIGHT, "${WorkoutFormat.weight(w)} kg")
 
-        val best1Rm = max(history.best1RmKg ?: 0.0, earlier.maxOfOrNull { oneRepMax(it.first, it.second) } ?: 0.0)
-        val oneRm = oneRepMax(w, r)
-        if (oneRm > best1Rm + 1e-9) events += PrEvent(exerciseId, PrKind.BEST_1RM, "${WorkoutFormat.weight(round2(oneRm))} kg")
+        val best1Rm = max(history.best1RmKg ?: 0.0, earlier.mapNotNull { oneRepMaxOrNull(it.first, it.second) }.maxOrNull() ?: 0.0)
+        val oneRm = oneRepMaxOrNull(w, r)
+        if (oneRm != null && oneRm > best1Rm + 1e-9) events += PrEvent(exerciseId, PrKind.BEST_1RM, "${WorkoutFormat.weight(round2(oneRm))} kg")
 
         val bestVol = max(history.bestSetVolumeKg ?: 0.0, earlier.maxOfOrNull { it.first * it.second } ?: 0.0)
         if (w * r > bestVol + 1e-9) events += PrEvent(exerciseId, PrKind.BEST_SET_VOLUME, WorkoutFormat.weightReps(w, r))
@@ -172,8 +181,8 @@ object WorkoutMath {
         if (done.isEmpty()) return emptySet()
         val keys = mutableSetOf<String>()
         done.maxBy { it.second }.let { if (it.second > (history.heaviestKg ?: 0.0)) keys += it.first }
-        done.maxBy { oneRepMax(it.second, it.third) }.let {
-            if (oneRepMax(it.second, it.third) > (history.best1RmKg ?: 0.0) + 1e-9) keys += it.first
+        done.mapNotNull { s -> oneRepMaxOrNull(s.second, s.third)?.let { s.first to it } }.maxByOrNull { it.second }?.let {
+            if (it.second > (history.best1RmKg ?: 0.0) + 1e-9) keys += it.first
         }
         done.maxBy { it.second * it.third }.let {
             if (it.second * it.third > (history.bestSetVolumeKg ?: 0.0) + 1e-9) keys += it.first

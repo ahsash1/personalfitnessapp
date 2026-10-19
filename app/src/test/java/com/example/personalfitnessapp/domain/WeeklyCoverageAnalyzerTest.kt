@@ -26,15 +26,25 @@ class WeeklyCoverageAnalyzerTest {
     }
 
     @Test
-    fun `back to back days for the same muscle are flagged regardless of relevantMuscles`() {
+    fun `back to back leg days are flagged regardless of relevantMuscles`() {
         val schedule = mapOf(
-            DayOfWeek.MONDAY to setOf(Muscle.CHEST),
-            DayOfWeek.TUESDAY to setOf(Muscle.CHEST),
+            DayOfWeek.MONDAY to setOf(Muscle.QUADS),
+            DayOfWeek.TUESDAY to setOf(Muscle.QUADS),
         )
         val warnings = WeeklyCoverageAnalyzer.analyze(schedule, relevantMuscles = emptySet())
-        val warning = warnings.first { it.muscle == Muscle.CHEST && it.reason == WarningReason.CONSECUTIVE_DAYS }
+        val warning = warnings.first { it.muscle == Muscle.QUADS && it.reason == WarningReason.CONSECUTIVE_DAYS }
         assertTrue(DayOfWeek.MONDAY in warning.days)
         assertTrue(DayOfWeek.TUESDAY in warning.days)
+    }
+
+    @Test
+    fun `back to back chest or arm days are not flagged since they recover within 48 h`() {
+        val schedule = mapOf(
+            DayOfWeek.MONDAY to setOf(Muscle.CHEST, Muscle.BICEPS),
+            DayOfWeek.TUESDAY to setOf(Muscle.CHEST, Muscle.BICEPS),
+        )
+        val warnings = WeeklyCoverageAnalyzer.analyze(schedule, relevantMuscles = setOf(Muscle.CHEST, Muscle.BICEPS))
+        assertFalse(warnings.any { it.reason == WarningReason.CONSECUTIVE_DAYS })
     }
 
     @Test

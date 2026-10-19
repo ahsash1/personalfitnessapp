@@ -78,8 +78,9 @@ fun WeeklyScheduleScreen(
                                 WarningReason.MISSED_ALL_WEEK ->
                                     "${warning.muscle.displayName} isn't trained anywhere this week"
                                 WarningReason.CONSECUTIVE_DAYS ->
-                                    "${warning.muscle.displayName} is trained on consecutive days: " +
-                                        warning.days.joinToString(", ") { it.name.lowercase() }
+                                    "${warning.muscle.displayName} is trained on consecutive days (" +
+                                        warning.days.joinToString(", ") { it.name.lowercase() } +
+                                        "). Legs can take up to 72 h to recover, so keep one of those days light."
                             },
                             modifier = Modifier.padding(12.dp),
                         )
