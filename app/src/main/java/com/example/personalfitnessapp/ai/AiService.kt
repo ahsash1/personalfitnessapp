@@ -32,6 +32,13 @@ interface AiService {
     suspend fun estimateFood(description: String?, imageBytes: ByteArray?): AiResult<List<FoodEstimate>> =
         AiResult.Failure("Food estimates aren't available.", retryable = false)
 
+    /**
+     * Applies a plain-language correction ("I only ate half", "no butter") to an already logged meal
+     * and returns the whole meal afterwards: same ids for kept items, 0 for new ones; missing = removed.
+     */
+    suspend fun reviseFood(items: List<FoodRevision>, instruction: String): AiResult<List<FoodRevision>> =
+        AiResult.Failure("Meal edits aren't available.", retryable = false)
+
     suspend fun chat(
         systemInstruction: String,
         tools: List<ToolDeclaration>,

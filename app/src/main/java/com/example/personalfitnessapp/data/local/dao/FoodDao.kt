@@ -24,6 +24,12 @@ interface FoodDao {
     @Query("DELETE FROM food_entries WHERE id = :id")
     suspend fun delete(id: Long)
 
+    @Query("DELETE FROM food_entries WHERE id IN (:ids)")
+    suspend fun deleteIds(ids: List<Long>)
+
+    @androidx.room.Update
+    suspend fun update(entries: List<FoodEntryEntity>)
+
     /** Most recent version of each distinct food name, for one-tap re-logging. */
     @Query(
         """

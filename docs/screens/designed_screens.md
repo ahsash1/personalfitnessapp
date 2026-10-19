@@ -22,6 +22,16 @@ Built in Hevy's visual language. What was assumed:
   per-muscle bars with hours until ready.
 - **Exercise animations**: Hevy's are licensed media we can't reuse; the form demo loops the open
   dataset's start/end photos with a crossfade.
+- **Food tab, v2 layout** (top to bottom): Eaten card (kcal ring with left/over, then three
+  macro rings: protein green, carbs amber, fat purple, each vs its target: protein by goal,
+  fat 25% of calories, carbs the rest); Balance card with a Today | 7 days toggle (Today by
+  default: big signed number, "In" bar split by meal vs "Out" bar split into resting /
+  everyday movement / walking / workouts / digestion on one scale, dashed stretch = the gap,
+  a "+N kcal added to lunch" chip after logging); Activity card (Samsung Health steps, km,
+  walking kcal, active kcal; connect or fix-permission prompts otherwise); meals. Meal header
+  ⋮ menu: Edit with AI, Delete meal (undo bar for 6 s). Tapping a food opens the editor
+  (grams rescale the rest; Delete). Edit with AI: type what changed ("only ate half"), see a
+  before/after preview, Apply updates the same entries in place.
 - **Food tab** (bottom nav, between Workout and Profile): not a Hevy screen. Day switcher; Eaten
   card (kcal ring vs target, protein bar, carbs/fat); Burned card (resting + digestion + daily
   activity + workouts, balance vs eaten, Health Connect connect button); meals list (breakfast,

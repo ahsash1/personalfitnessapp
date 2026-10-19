@@ -162,6 +162,60 @@ class ResilientAiService @Inject constructor(
     }
 
     /** A malformed JSON answer counts as that model failing, so the next model gets a turn. */
+    override suspend fun reviseFood(items: List<FoodRevision>, instruction: String): AiResult<List<FoodRevision>> {
+        val schema = buildJsonObject {
+            put("type", "object")
+            putJsonObject("properties") {
+                putJsonObject("items") {
+                    put("type", "array")
+                    putJsonObject("items") {
+                        put("type", "object")
+                        putJsonObject("properties") {
+                            putJsonObject("id") { put("type", "integer") }
+                            putJsonObject("name") { put("type", "string") }
+                            putJsonObject("grams") { put("type", "number") }
+                            putJsonObject("kcal") { put("type", "number") }
+                            putJsonObject("protein_g") { put("type", "number") }
+                            putJsonObject("carbs_g") { put("type", "number") }
+                            putJsonObject("fat_g") { put("type", "number") }
+                        }
+                        putJsonArray("required") { listOf("id", "name", "grams", "kcal", "protein_g", "carbs_g", "fat_g").forEach { add(it) } }
+                    }
+                }
+            }
+            putJsonArray("required") { add("items") }
+        }
+        val prompt = buildString {
+            append("You edit an already logged meal in a calorie tracker. Apply the user's change and return the ")
+            append("whole meal afterwards. Keep each kept item's id. When an amount changes, scale grams, kcal and ")
+            append("protein/carbs/fat together. Leave items the user didn't mention exactly as they are. Leave out ")
+            append("items that were not eaten at all. Add new foods with id 0, using standard food-composition values.")
+            append("\n\nLogged meal (id | name | grams | kcal | protein g | carbs g | fat g):")
+            items.forEach { (id, f) ->
+                append("\n").append(id).append(" | ").append(f.name).append(" | ").append(f.grams ?: "?").append(" | ")
+                    .append(f.kcal).append(" | ").append(f.proteinG).append(" | ").append(f.carbsG).append(" | ").append(f.fatG)
+            }
+            append("\n\nThe user's change: ").append(instruction)
+        }
+        return structured(prompt, schema, null) { obj ->
+            (obj["items"] as kotlinx.serialization.json.JsonArray).map { el ->
+                val o = el as JsonObject
+                fun num(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toFloatOrNull() ?: 0f
+                FoodRevision(
+                    id = (o["id"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()?.toLong() ?: 0L,
+                    food = FoodEstimate(
+                        name = (o["name"] as kotlinx.serialization.json.JsonPrimitive).content,
+                        grams = num("grams").takeIf { it > 0 },
+                        kcal = num("kcal"),
+                        proteinG = num("protein_g"),
+                        carbsG = num("carbs_g"),
+                        fatG = num("fat_g"),
+                    ),
+                )
+            }
+        }
+    }
+
     override suspend fun estimateFood(description: String?, imageBytes: ByteArray?): AiResult<List<FoodEstimate>> {
         val schema = buildJsonObject {
             put("type", "object")

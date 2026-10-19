@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.personalfitnessapp.ai.AiResult
 import com.example.personalfitnessapp.ai.AiService
 import com.example.personalfitnessapp.ai.FoodEstimate
+import com.example.personalfitnessapp.ai.FoodRevision
 import com.example.personalfitnessapp.data.energy.BodyStats
 import com.example.personalfitnessapp.data.energy.BodyStatsSource
 import com.example.personalfitnessapp.data.energy.DailyBalanceTracker
@@ -60,11 +61,22 @@ data class DayNutrition(
     val fat: Double,
     val targetKcal: Int?,
     val targetProtein: Int?,
+    val targetCarbs: Int?,
+    val targetFat: Int?,
     val burn: DailyEnergy.Burn?,
     val workouts: List<WorkoutSummary>,
     /** True once the day has ended at midnight and its number is locked in. */
     val closed: Boolean,
+    /** kcal per meal, in [MealType] order, for the balance bar. */
+    val byMeal: List<Double>,
+    val stats: BodyStats?,
 )
+
+/** A just-logged (or AI-edited) change to a meal, shown briefly on the balance card. */
+data class JustLogged(val meal: MealType, val kcal: Double, val at: Long)
+
+/** Something just deleted, kept for a few seconds so it can be put back. */
+data class FoodUndo(val label: String, val entries: List<FoodEntryEntity>)
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -100,6 +112,13 @@ class NutritionViewModel @Inject constructor(
     val weekAverage: StateFlow<Pair<Double, Double>?> = _weekAverage.asStateFlow()
 
     val healthPermissions: Set<String> get() = health.permissions
+
+    private val _justLogged = MutableStateFlow<JustLogged?>(null)
+    val justLogged: StateFlow<JustLogged?> = _justLogged.asStateFlow()
+    fun clearJustLogged() { _justLogged.value = null }
+
+    private val _undo = MutableStateFlow<FoodUndo?>(null)
+    val undo: StateFlow<FoodUndo?> = _undo.asStateFlow()
 
     /** Locked-in balances for the last month of finished days. */
     val history: StateFlow<List<DailyBalanceEntity>> = tracker.observeSince(LocalDate.now(zone).minusDays(DailyBalanceTracker.BACKFILL_DAYS))
@@ -193,6 +212,7 @@ class NutritionViewModel @Inject constructor(
         }
         val target = p.kcalTargetOverride ?: if (s != null && avg != null) DailyEnergy.target(s.bmr, avg.first, avg.second, p.goal.kcalOffset) else null
         val protein = p.proteinTargetOverride ?: s?.let { EnergyMath.proteinTarget(it.weightKg, p.goal == NutritionGoal.LOSE || p.goal == NutritionGoal.RECOMP) }
+        val macros = if (target != null && protein != null) EnergyMath.macroTargets(target, protein) else null
         return DayNutrition(
             eatenKcal = eaten,
             protein = entries.sumOf { it.proteinG.toDouble() },
@@ -200,9 +220,13 @@ class NutritionViewModel @Inject constructor(
             fat = entries.sumOf { it.fatG.toDouble() },
             targetKcal = target,
             targetProtein = protein,
+            targetCarbs = macros?.carbsG,
+            targetFat = macros?.fatG,
             burn = burn,
             workouts = workouts,
             closed = closed,
+            byMeal = MealType.entries.map { m -> entries.filter { it.meal == m }.sumOf { it.kcal.toDouble() } },
+            stats = s,
         )
     }
 
@@ -217,11 +241,64 @@ class NutritionViewModel @Inject constructor(
                 proteinG = it.proteinG, carbsG = it.carbsG, fatG = it.fatG, source = source, barcode = barcode, createdAt = now,
             )
         })
+        _justLogged.value = JustLogged(meal, items.sumOf { it.kcal.toDouble() }, now)
         tracker.reclose(d)
     }
 
     fun delete(id: Long) = viewModelScope.launch {
+        val gone = entries.value.filter { it.id == id }
         foodDao.delete(id)
+        gone.firstOrNull()?.let { _undo.value = FoodUndo("Deleted ${it.name}", gone) }
+        tracker.reclose(_date.value)
+    }
+
+    fun deleteMeal(meal: MealType) = viewModelScope.launch {
+        val gone = entries.value.filter { it.meal == meal }
+        if (gone.isEmpty()) return@launch
+        foodDao.deleteIds(gone.map { it.id })
+        _undo.value = FoodUndo("Deleted ${meal.label.lowercase()} (${gone.size} item${if (gone.size == 1) "" else "s"})", gone)
+        tracker.reclose(_date.value)
+    }
+
+    fun undoDelete() = viewModelScope.launch {
+        val u = _undo.value ?: return@launch
+        _undo.value = null
+        foodDao.insert(u.entries)
+        LocalDate.parse(u.entries.first().date).let { tracker.reclose(it) }
+    }
+
+    fun clearUndo() { _undo.value = null }
+
+    /** Edits a logged food in place. */
+    fun update(entry: FoodEntryEntity, f: FoodEstimate) = viewModelScope.launch {
+        foodDao.update(listOf(entry.copy(name = f.name, grams = f.grams, kcal = f.kcal, proteinG = f.proteinG, carbsG = f.carbsG, fatG = f.fatG)))
+        tracker.reclose(LocalDate.parse(entry.date))
+    }
+
+    /** Asks the AI to apply a plain-language change ("I only ate half") to what's logged for [meal]. */
+    suspend fun revise(meal: MealType, instruction: String): AiResult<List<FoodRevision>> {
+        val items = entries.value.filter { it.meal == meal }.map { FoodRevision(it.id, FoodEstimate(it.name, it.grams, it.kcal, it.proteinG, it.carbsG, it.fatG)) }
+        return ai.reviseFood(items, instruction)
+    }
+
+    /** Applies an AI edit to the logged rows: same ids are updated, missing ones removed, id 0 added. */
+    fun applyRevision(meal: MealType, revised: List<FoodRevision>) = viewModelScope.launch {
+        val current = entries.value.filter { it.meal == meal }
+        val byId = current.associateBy { it.id }
+        val kept = revised.filter { it.id in byId }.distinctBy { it.id }
+        val removed = current.filter { c -> kept.none { it.id == c.id } }
+        foodDao.update(kept.map { r ->
+            val f = r.food
+            byId.getValue(r.id).copy(name = f.name, grams = f.grams, kcal = f.kcal, proteinG = f.proteinG, carbsG = f.carbsG, fatG = f.fatG)
+        })
+        if (removed.isNotEmpty()) foodDao.deleteIds(removed.map { it.id })
+        val added = revised.filter { it.id !in byId }
+        if (added.isNotEmpty()) {
+            val source = current.firstOrNull()?.source ?: FoodSource.AI_TEXT
+            add(meal, added.map { it.food }, source).join()
+        }
+        val delta = revised.sumOf { it.food.kcal.toDouble() } - current.sumOf { it.kcal.toDouble() }
+        _justLogged.value = JustLogged(meal, delta, clock.millis())
         tracker.reclose(_date.value)
     }
 

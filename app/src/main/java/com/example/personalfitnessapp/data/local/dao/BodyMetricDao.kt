@@ -19,6 +19,9 @@ interface BodyMetricDao {
     @Delete
     suspend fun delete(metric: BodyMetricEntity)
 
+    @Query("SELECT * FROM body_metrics WHERE weightKg IS NOT NULL ORDER BY date DESC, id DESC LIMIT 1")
+    suspend fun latestWeight(): BodyMetricEntity?
+
     @Query("SELECT * FROM body_metrics ORDER BY date DESC")
     fun observeAll(): Flow<List<BodyMetricEntity>>
 

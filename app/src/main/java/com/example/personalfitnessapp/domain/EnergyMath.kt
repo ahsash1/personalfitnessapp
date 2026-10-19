@@ -175,6 +175,18 @@ object EnergyMath {
         return 0.5 * weightKg * km
     }
 
+    /** Fat's share of calories: inside the 20-35% range of the ACSM/AND/DC 2016 position stand, leaving carbs for training. */
+    const val FAT_SHARE = 0.25
+
+    data class MacroTargets(val proteinG: Int, val carbsG: Int, val fatG: Int)
+
+    /** Protein comes from the goal (see [proteinTarget]), fat is [FAT_SHARE] of calories, carbs fill the rest. */
+    fun macroTargets(kcal: Int, proteinG: Int): MacroTargets {
+        val fat = (kcal * FAT_SHARE / 9).roundToInt()
+        val carbs = ((kcal - proteinG * 4 - fat * 9) / 4.0).roundToInt().coerceAtLeast(0)
+        return MacroTargets(proteinG, carbs, fat)
+    }
+
     /** Protein target in g/day: 1.6 g/kg is where gains plateau on average (Morton et al. 2018); more in a deficit. */
     fun proteinTarget(weightKg: Double, inDeficit: Boolean): Int = (weightKg * if (inDeficit) 2.0 else 1.6).roundToInt()
 }

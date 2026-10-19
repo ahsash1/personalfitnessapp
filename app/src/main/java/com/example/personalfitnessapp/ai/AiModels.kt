@@ -35,6 +35,9 @@ data class ToolCall(val id: String, val name: String, val arguments: JsonObject)
 data class ToolResult(val callId: String, val name: String, val content: String)
 
 /** One food from an AI meal estimate; macros are for the [grams] eaten. */
+/** A logged food after an AI edit: [id] is the existing entry it replaces, 0 for a new one. */
+data class FoodRevision(val id: Long, val food: FoodEstimate)
+
 data class FoodEstimate(
     val name: String,
     val grams: Float?,

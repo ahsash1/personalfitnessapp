@@ -1,6 +1,30 @@
 package com.example.personalfitnessapp.ui.nutrition
 
 import android.Manifest
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.material.icons.automirrored.outlined.DirectionsWalk
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.Dp
+import com.example.personalfitnessapp.ai.FoodRevision
+import com.example.personalfitnessapp.data.energy.BodyStats
+import com.example.personalfitnessapp.domain.EnergyMath
+import com.example.personalfitnessapp.health.HealthActivity
+import com.example.personalfitnessapp.ui.theme.AppPrimaryContainer
+import kotlinx.coroutines.delay
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
@@ -112,8 +136,21 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 private fun Double.k() = roundToInt().let { "%,d".format(Locale.US, it) }
+private fun signed(v: Double) = (if (v <= 0) "−" else "+") + kotlin.math.abs(v).k()
+private fun FoodEntryEntity.estimate() = FoodEstimate(name, grams, kcal, proteinG, carbsG, fatG)
 
-/** Food tab: eaten vs target, calories burned (resting + digestion + daily activity + workouts), meals. */
+private val ProteinColor = Color(0xFF30D158)
+private val CarbsColor = Color(0xFFFFB340)
+private val FatColor = Color(0xFFBF5AF2)
+/** Breakfast, lunch, dinner, snacks: cool shades, "food in". */
+private val MealColors = listOf(Color(0xFF64D2FF), Color(0xFF0A84FF), Color(0xFF5E5CE6), Color(0xFFA48BFF))
+private val RestingColor = Color(0xFF636366)
+private val EverydayColor = Color(0xFFFF9F0A)
+private val WalkingColor = Color(0xFFFFD60A)
+private val WorkoutColor = Color(0xFFFF453A)
+private val DigestionColor = Color(0xFFAC8E68)
+
+/** Food tab: eaten and macros vs targets, Samsung Health activity, today's balance, meals. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NutritionScreen(viewModel: NutritionViewModel = hiltViewModel()) {
@@ -126,8 +163,12 @@ fun NutritionScreen(viewModel: NutritionViewModel = hiltViewModel()) {
     val week by viewModel.weekAverage.collectAsState()
     val healthStatus by viewModel.healthStatus.collectAsState()
     val history by viewModel.history.collectAsState()
+    val undo by viewModel.undo.collectAsState()
+    val justLogged by viewModel.justLogged.collectAsState()
     val context = LocalContext.current
     var addFor by remember { mutableStateOf<MealType?>(null) }
+    var editMeal by remember { mutableStateOf<MealType?>(null) }
+    var editItem by remember { mutableStateOf<FoodEntryEntity?>(null) }
     var showSettings by remember { mutableStateOf(false) }
     LifecycleResumeEffect(Unit) {
         viewModel.refresh()
@@ -136,224 +177,534 @@ fun NutritionScreen(viewModel: NutritionViewModel = hiltViewModel()) {
     val connect = rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) { viewModel.refresh() }
     val day = viewModel.day(entries, summaries, stats, prefs, activity, week, history)
     val today = LocalDate.now()
+    val onConnect: () -> Unit = {
+        when (healthStatus) {
+            HealthStatus.NOT_CONNECTED, HealthStatus.CONNECTED -> connect.launch(viewModel.healthPermissions)
+            else -> context.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.google.android.apps.healthdata")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
+    }
+    LaunchedEffect(justLogged) {
+        if (justLogged != null) { delay(4_000); viewModel.clearJustLogged() }
+    }
+    LaunchedEffect(undo) {
+        if (undo != null) { delay(6_000); viewModel.clearUndo() }
+    }
 
-    LazyColumn(Modifier.fillMaxSize().background(AppBackground).statusBarsPadding()) {
-        item {
-            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Food", Modifier.weight(1f), color = AppTextPrimary, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                IconButton(onClick = { showSettings = true }) { Icon(Icons.Outlined.Settings, "Food goals", tint = AppTextPrimary) }
-            }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { viewModel.shiftDay(-1) }) { Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, "Previous day", tint = AppTextPrimary) }
-                Text(
-                    when (date) { today -> "Today"; today.minusDays(1) -> "Yesterday"; else -> date.format(DateTimeFormatter.ofPattern("EEE, MMM d", Locale.US)) },
-                    Modifier.weight(1f), color = AppTextPrimary, fontSize = 17.sp, textAlign = TextAlign.Center,
-                )
-                IconButton(onClick = { viewModel.shiftDay(1) }, enabled = date < today) {
-                    Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, "Next day", tint = if (date < today) AppTextPrimary else AppTextSecondary)
+    Box(Modifier.fillMaxSize().background(AppBackground)) {
+        LazyColumn(Modifier.fillMaxSize().statusBarsPadding()) {
+            item {
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Food", Modifier.weight(1f), color = AppTextPrimary, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                    IconButton(onClick = { showSettings = true }) { Icon(Icons.Outlined.Settings, "Food goals", tint = AppTextPrimary) }
                 }
-            }
-            EatenCard(day)
-            BurnedCard(day, healthStatus, onConnect = {
-                when (healthStatus) {
-                    HealthStatus.NOT_CONNECTED -> connect.launch(viewModel.healthPermissions)
-                    else -> context.startActivity(
-                        Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.google.android.apps.healthdata")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { viewModel.shiftDay(-1) }) { Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, "Previous day", tint = AppTextPrimary) }
+                    Text(
+                        when (date) { today -> "Today"; today.minusDays(1) -> "Yesterday"; else -> date.format(DateTimeFormatter.ofPattern("EEE, MMM d", Locale.US)) },
+                        Modifier.weight(1f), color = AppTextPrimary, fontSize = 17.sp, textAlign = TextAlign.Center,
                     )
+                    IconButton(onClick = { viewModel.shiftDay(1) }, enabled = date < today) {
+                        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, "Next day", tint = if (date < today) AppTextPrimary else AppTextSecondary)
+                    }
                 }
-            })
-            BalanceHistoryCard(history, today, date, prefs.goal) { viewModel.showDay(it) }
-            if (stats == null) Text("Finish your profile (age, height, weight) in Settings so calories can be worked out.", Modifier.padding(16.dp), color = AppDanger)
+                EatenCard(day)
+                BalanceCard(day, justLogged, history, today, date, prefs.goal) { viewModel.showDay(it) }
+                ActivityCard(activity, stats, healthStatus, date == today, onConnect) { viewModel.refresh() }
+                if (stats == null) Text("Finish your profile (age, height, weight) in Settings so calories can be worked out.", Modifier.padding(16.dp), color = AppDanger)
+            }
+            MealType.entries.forEach { meal ->
+                val list = entries.filter { it.meal == meal }
+                item(key = "h" + meal.name) {
+                    var menu by remember { mutableStateOf(false) }
+                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(10.dp).clip(CircleShape).background(MealColors[meal.ordinal]))
+                        Spacer(Modifier.width(8.dp))
+                        Text(meal.label, Modifier.weight(1f), color = AppTextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                        if (list.isNotEmpty()) Text("${list.sumOf { it.kcal.toDouble() }.k()} kcal", color = AppTextSecondary, fontSize = 15.sp)
+                        IconButton(onClick = { addFor = meal }) { Icon(Icons.Outlined.Add, "Add to ${meal.label}", tint = AppPrimary) }
+                        if (list.isNotEmpty()) Box {
+                            IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "${meal.label} options", tint = AppTextSecondary) }
+                            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = AppSurfaceHigh) {
+                                DropdownMenuItem(
+                                    text = { Text("Edit with AI") },
+                                    leadingIcon = { Icon(Icons.Outlined.AutoAwesome, null, tint = AppPrimary) },
+                                    onClick = { menu = false; editMeal = meal },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Delete ${meal.label.lowercase()}", color = AppDanger) },
+                                    leadingIcon = { Icon(Icons.Outlined.Delete, null, tint = AppDanger) },
+                                    onClick = { menu = false; viewModel.deleteMeal(meal) },
+                                )
+                            }
+                        }
+                    }
+                }
+                items(list, key = { it.id }) { e -> FoodRow(e, onClick = { editItem = e }) { viewModel.delete(e.id) } }
+            }
+            item { Spacer(Modifier.height(120.dp)) }
         }
-        MealType.entries.forEach { meal ->
-            val list = entries.filter { it.meal == meal }
-            item(key = "h" + meal.name) {
-                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(meal.label, Modifier.weight(1f), color = AppTextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                    if (list.isNotEmpty()) Text("${list.sumOf { it.kcal.toDouble() }.k()} kcal", color = AppTextSecondary, fontSize = 15.sp)
-                    IconButton(onClick = { addFor = meal }) { Icon(Icons.Outlined.Add, "Add to ${meal.label}", tint = AppPrimary) }
+        undo?.let { u ->
+            Surface(
+                Modifier.align(Alignment.BottomCenter).padding(16.dp).fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp), color = AppSurfaceHigh, shadowElevation = 6.dp,
+            ) {
+                Row(Modifier.padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(u.label, Modifier.weight(1f), color = AppTextPrimary, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    TextButton(onClick = { viewModel.undoDelete() }) { Text("UNDO", color = AppPrimary, fontWeight = FontWeight.SemiBold) }
                 }
             }
-            items(list, key = { it.id }) { e -> FoodRow(e) { viewModel.delete(e.id) } }
         }
-        item { Spacer(Modifier.height(120.dp)) }
     }
 
     addFor?.let { meal -> AddFoodSheet(meal, viewModel) { addFor = null } }
+    editMeal?.let { meal -> EditMealSheet(meal, entries.filter { it.meal == meal }, viewModel, onEditItem = { editItem = it }) { editMeal = null } }
+    editItem?.let { e ->
+        ManualDialog(
+            initial = e.estimate(),
+            onDelete = { viewModel.delete(e.id); editItem = null },
+            onDismiss = { editItem = null },
+        ) { viewModel.update(e, it); editItem = null }
+    }
     if (showSettings) GoalsSheet(prefs.goal, prefs.kcalTargetOverride, prefs.proteinTargetOverride, prefs.bikeWattsPerLevel, viewModel) { showSettings = false }
 }
 
 @Composable
-private fun Ring(fraction: Float, color: androidx.compose.ui.graphics.Color, modifier: Modifier) {
+private fun Ring(fraction: Float, color: Color, modifier: Modifier, stroke: Dp = 10.dp) {
     Canvas(modifier) {
-        val stroke = 10.dp.toPx()
-        val inset = stroke / 2
-        drawArc(AppSurfaceHigh, -90f, 360f, false, Offset(inset, inset), Size(size.width - stroke, size.height - stroke), style = Stroke(stroke))
-        drawArc(color, -90f, 360f * fraction.coerceIn(0f, 1f), false, Offset(inset, inset), Size(size.width - stroke, size.height - stroke), style = Stroke(stroke))
+        val w = stroke.toPx()
+        val inset = w / 2
+        val arcSize = Size(size.width - w, size.height - w)
+        drawArc(AppSurfaceHigh, -90f, 360f, false, Offset(inset, inset), arcSize, style = Stroke(w))
+        drawArc(color, -90f, 360f * fraction.coerceIn(0f, 1f), false, Offset(inset, inset), arcSize, style = Stroke(w, cap = StrokeCap.Round))
     }
+}
+
+@Composable
+private fun Card(content: @Composable () -> Unit) {
+    Surface(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), shape = RoundedCornerShape(16.dp), color = AppSurface) { content() }
 }
 
 @Composable
 private fun EatenCard(day: DayNutrition) {
-    Surface(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), shape = RoundedCornerShape(16.dp), color = AppSurface) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(110.dp), contentAlignment = Alignment.Center) {
+    Card {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 val target = day.targetKcal
                 val over = target != null && day.eatenKcal > target
-                Ring(if (target != null) (day.eatenKcal / target).toFloat() else 0f, if (over) AppDanger else AppPrimary, Modifier.size(110.dp))
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(day.eatenKcal.k(), color = AppTextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                    Text(target?.let { "of ${"%,d".format(Locale.US, it)}" } ?: "kcal", color = AppTextSecondary, fontSize = 12.sp)
+                val frac by animateFloatAsState(if (target != null && target > 0) (day.eatenKcal / target).toFloat() else 0f, tween(700), label = "kcal")
+                Box(Modifier.size(120.dp), contentAlignment = Alignment.Center) {
+                    Ring(frac, if (over) AppDanger else AppPrimary, Modifier.size(120.dp), 12.dp)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(day.eatenKcal.k(), color = AppTextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                        Text("kcal eaten", color = AppTextSecondary, fontSize = 12.sp)
+                    }
+                }
+                Spacer(Modifier.width(20.dp))
+                Column(Modifier.weight(1f)) {
+                    if (target != null) {
+                        val left = target - day.eatenKcal
+                        Text(kotlin.math.abs(left).k(), color = if (left >= 0) AppTextPrimary else AppDanger, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                        Text(if (left >= 0) "kcal left" else "kcal over", color = AppTextSecondary, fontSize = 14.sp)
+                        Spacer(Modifier.height(6.dp))
+                        Text("Target ${"%,d".format(Locale.US, target)} kcal", color = AppTextSecondary, fontSize = 13.sp)
+                    } else {
+                        Text("Set up your profile to get a calorie target.", color = AppTextSecondary, fontSize = 14.sp)
+                    }
                 }
             }
-            Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                day.targetKcal?.let { t ->
-                    val left = t - day.eatenKcal
-                    Text(if (left >= 0) "${left.k()} kcal left" else "${(-left).k()} kcal over", color = if (left >= 0) AppTextPrimary else AppDanger, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                }
-                MacroBar("Protein", day.protein, day.targetProtein?.toDouble(), AppSuccess)
-                Text("Carbs ${day.carbs.k()} g · Fat ${day.fat.k()} g", color = AppTextSecondary, fontSize = 14.sp)
+            Spacer(Modifier.height(18.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                MacroRing("Protein", day.protein, day.targetProtein, ProteinColor)
+                MacroRing("Carbs", day.carbs, day.targetCarbs, CarbsColor)
+                MacroRing("Fat", day.fat, day.targetFat, FatColor)
             }
         }
     }
 }
 
 @Composable
-private fun MacroBar(label: String, value: Double, target: Double?, color: androidx.compose.ui.graphics.Color) {
-    Column {
-        Text("$label ${value.k()}${target?.let { " / ${it.k()}" } ?: ""} g", color = AppTextPrimary, fontSize = 14.sp)
+private fun MacroRing(label: String, value: Double, target: Int?, color: Color) {
+    val frac by animateFloatAsState(if (target != null && target > 0) (value / target).toFloat() else 0f, tween(700), label = label)
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.size(78.dp), contentAlignment = Alignment.Center) {
+            Ring(frac, color, Modifier.size(78.dp), 7.dp)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("${value.roundToInt()}", color = AppTextPrimary, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                Text(target?.let { "/ $it g" } ?: "g", color = AppTextSecondary, fontSize = 11.sp)
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(label, color = color, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
         if (target != null) {
-            Box(Modifier.fillMaxWidth().height(6.dp).clip(CircleShape).background(AppSurfaceHigh)) {
-                Box(Modifier.fillMaxWidth((value / target).toFloat().coerceIn(0f, 1f)).height(6.dp).clip(CircleShape).background(color))
-            }
+            val left = target - value
+            Text(if (left >= 0) "${left.roundToInt()} g left" else "${(-left).roundToInt()} g over", color = if (left >= 0) AppTextSecondary else AppDanger, fontSize = 12.sp)
         }
     }
 }
 
+/** Steps and active calories from Samsung Health (via Health Connect), or how to connect it. */
 @Composable
-private fun BurnedCard(day: DayNutrition, status: HealthStatus, onConnect: () -> Unit) {
-    val burn = day.burn ?: return
-    Surface(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), shape = RoundedCornerShape(16.dp), color = AppSurface) {
+private fun ActivityCard(h: HealthActivity?, stats: BodyStats?, status: HealthStatus, isToday: Boolean, onConnect: () -> Unit, onRefresh: () -> Unit) {
+    Card {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Burned", Modifier.weight(1f), color = AppTextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                Text("${burn.total.k()} kcal", color = AppTextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-            }
-            BurnRow("Resting (BMR, full day)", burn.resting)
-            BurnRow("Digesting food (10% of eaten)", burn.digestion)
-            when (burn.activitySource) {
-                DailyEnergy.ActivitySource.HEALTH_ACTIVE_CALORIES ->
-                    BurnRow("Daily activity · Samsung Health${burn.steps?.let { " · %,d steps".format(Locale.US, it) } ?: ""}", burn.activity)
-                DailyEnergy.ActivitySource.STEPS -> {
-                    val everyday = DailyEnergy.everydayMovement(burn.resting)
-                    BurnRow("Everyday movement (sitting, standing, chores)", everyday)
-                    BurnRow("Walking · ${"%,d".format(Locale.US, burn.steps ?: 0)} steps", burn.activity - everyday)
+                Icon(Icons.AutoMirrored.Outlined.DirectionsWalk, null, tint = WalkingColor)
+                Spacer(Modifier.width(8.dp))
+                Text("Activity", Modifier.weight(1f), color = AppTextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                if (status == HealthStatus.CONNECTED) {
+                    Text("Samsung Health", color = AppTextSecondary, fontSize = 12.sp)
+                    IconButton(onClick = onRefresh) { Icon(Icons.Outlined.Refresh, "Refresh from Samsung Health", tint = AppTextSecondary) }
                 }
-                DailyEnergy.ActivitySource.ESTIMATE -> BurnRow("Everyday movement · steps not connected", burn.activity)
-                DailyEnergy.ActivitySource.NONE -> BurnRow("Daily activity · not connected", burn.activity)
             }
-            day.workouts.forEach { w -> BurnRow("${w.title} · ${WorkoutFormat.finishedDuration(w.durationSec)}", (w.kcal ?: 0).toDouble()) }
-            if (day.workouts.isEmpty()) BurnRow("Workouts", 0.0)
-            val balance = DailyEnergy.balance(day.eatenKcal, burn)
-            Text(
-                "${if (day.closed) "Final balance" else "Balance so far"} ${signed(balance)} kcal (${if (balance <= 0) "deficit" else "surplus"})",
-                color = if (balance <= 0) AppSuccess else AppTextSecondary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
-            )
-            if (day.closed) Text("Locked in when the day ended at 12:00 am.", color = AppTextSecondary, fontSize = 12.sp)
-            Text("Steps and active calories during logged workouts are left out, so nothing is counted twice.", color = AppTextSecondary, fontSize = 12.sp)
-            if (status != HealthStatus.CONNECTED) {
-                Spacer(Modifier.height(4.dp))
-                PrimaryButton(
-                    when (status) {
-                        HealthStatus.NOT_CONNECTED -> "Connect Samsung Health (Health Connect)"
-                        HealthStatus.NEEDS_UPDATE -> "Update Health Connect"
-                        else -> "Install Health Connect"
-                    },
-                    onClick = onConnect, modifier = Modifier.fillMaxWidth(),
-                )
-                Text("In Samsung Health: Settings → Health Connect → allow Steps and Active calories.", color = AppTextSecondary, fontSize = 12.sp)
+            val steps = h?.totalSteps
+            when {
+                status != HealthStatus.CONNECTED -> {
+                    Text("Connect Samsung Health to see your steps here and count them in calories burned.", color = AppTextSecondary, fontSize = 14.sp)
+                    PrimaryButton(
+                        when (status) {
+                            HealthStatus.NOT_CONNECTED -> "Connect Samsung Health"
+                            HealthStatus.NEEDS_UPDATE -> "Update Health Connect"
+                            else -> "Install Health Connect"
+                        },
+                        onClick = onConnect, modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text("Also in Samsung Health: Settings → Health Connect → allow Steps and Active calories.", color = AppTextSecondary, fontSize = 12.sp)
+                }
+                steps == null && h?.totalActiveKcal == null -> {
+                    Text(
+                        "Connected, but no steps have come through ${if (isToday) "yet today" else "for this day"}. In Samsung Health open Settings → Health Connect and make sure Steps is allowed, then tap refresh.",
+                        color = AppTextSecondary, fontSize = 14.sp,
+                    )
+                    TextButton(onClick = onConnect) { Text("Check permissions", color = AppPrimary) }
+                }
+                else -> {
+                    val count = steps ?: 0L
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text("%,d".format(Locale.US, count), color = AppTextPrimary, fontSize = 34.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.width(6.dp))
+                        Text("steps", Modifier.padding(bottom = 6.dp), color = AppTextSecondary, fontSize = 15.sp)
+                    }
+                    Text(
+                        listOfNotNull(
+                            stats?.let { "%.1f km".format(Locale.US, count * it.heightCm / 100 * 0.415 / 1000) },
+                            stats?.let { "${EnergyMath.stepsKcal(count, it.weightKg, it.heightCm, it.sex).k()} kcal walking" },
+                            h?.totalActiveKcal?.takeIf { it > 0 }?.let { "${it.k()} active kcal" },
+                        ).joinToString(" · "),
+                        color = AppTextSecondary, fontSize = 14.sp,
+                    )
+                    val inWorkouts = count - (h?.steps ?: count)
+                    if (inWorkouts > 0) Text("%,d of these were during logged workouts, so they count toward the workout instead.".format(Locale.US, inWorkouts), color = AppTextSecondary, fontSize = 12.sp)
+                }
             }
         }
     }
 }
 
-private fun signed(v: Double) = (if (v <= 0) "−" else "+") + kotlin.math.abs(v).k()
+/** Today's balance (default) or the last 7 finished days. */
+@Composable
+private fun BalanceCard(day: DayNutrition, justLogged: JustLogged?, history: List<DailyBalanceEntity>, today: LocalDate, selected: LocalDate, goal: NutritionGoal, onDay: (LocalDate) -> Unit) {
+    var week by remember { mutableStateOf(false) }
+    Card {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Balance", Modifier.weight(1f), color = AppTextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                Row(Modifier.clip(RoundedCornerShape(8.dp)).background(AppBackground).padding(2.dp)) {
+                    listOf(false to (if (selected == today) "Today" else "Day"), true to "7 days").forEach { (isWeek, label) ->
+                        Text(
+                            label,
+                            Modifier.clip(RoundedCornerShape(6.dp)).background(if (week == isWeek) AppSurfaceHigh else AppBackground)
+                                .clickable { week = isWeek }.padding(horizontal = 12.dp, vertical = 5.dp),
+                            color = if (week == isWeek) AppTextPrimary else AppTextSecondary, fontSize = 13.sp,
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            if (week) WeekBalance(history, today, selected, goal, onDay) else DayBalance(day, justLogged, goal)
+        }
+    }
+}
+
+/**
+ * Two bars on one scale: food in (by meal) and energy out (resting, everyday movement, walking,
+ * workouts, digestion). The dashed stretch on the shorter bar is the deficit or surplus. Logging a
+ * meal grows the "In" bar.
+ */
+@Composable
+private fun DayBalance(day: DayNutrition, justLogged: JustLogged?, goal: NutritionGoal) {
+    val burn = day.burn
+    if (burn == null) {
+        Text("Finish your profile in Settings to see calories burned.", color = AppTextSecondary, fontSize = 14.sp)
+        return
+    }
+    val balance = DailyEnergy.balance(day.eatenKcal, burn)
+    val good = if (goal == NutritionGoal.GAIN) balance > 0 else balance <= 0
+    val shown by animateFloatAsState(balance.toFloat(), tween(700), label = "balance")
+    Row(verticalAlignment = Alignment.Bottom) {
+        Text(signed(shown.toDouble()), color = if (good) AppSuccess else AppDanger, fontSize = 34.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.width(6.dp))
+        Text(
+            "kcal ${if (balance <= 0) "deficit" else "surplus"}${if (day.closed) "" else " so far"}",
+            Modifier.padding(bottom = 6.dp), color = AppTextSecondary, fontSize = 15.sp,
+        )
+    }
+    if (day.closed) Text("Final number, locked in when the day ended at 12:00 am.", color = AppTextSecondary, fontSize = 12.sp)
+    AnimatedVisibility(justLogged != null, enter = fadeIn(), exit = fadeOut()) {
+        justLogged?.let { j ->
+            Text(
+                if (j.kcal >= 0) "+${j.kcal.k()} kcal added to ${j.meal.label.lowercase()}" else "${j.kcal.k()} kcal taken off ${j.meal.label.lowercase()}",
+                Modifier.padding(top = 6.dp).clip(RoundedCornerShape(8.dp)).background(AppPrimaryContainer).padding(horizontal = 10.dp, vertical = 4.dp),
+                color = AppTextPrimary, fontSize = 13.sp,
+            )
+        }
+    }
+    Spacer(Modifier.height(12.dp))
+
+    val everyday = when (burn.activitySource) {
+        DailyEnergy.ActivitySource.STEPS -> DailyEnergy.everydayMovement(burn.resting)
+        DailyEnergy.ActivitySource.ESTIMATE -> burn.activity
+        else -> 0.0
+    }
+    val other = when (burn.activitySource) {
+        DailyEnergy.ActivitySource.STEPS -> burn.activity - everyday
+        DailyEnergy.ActivitySource.HEALTH_ACTIVE_CALORIES -> burn.activity
+        else -> 0.0
+    }
+    val out = listOf(
+        Triple("Resting (full day)", burn.resting, RestingColor),
+        Triple("Everyday movement", everyday, EverydayColor),
+        Triple(
+            when (burn.activitySource) {
+                DailyEnergy.ActivitySource.HEALTH_ACTIVE_CALORIES -> "Samsung active calories"
+                else -> "Walking${burn.steps?.let { " · %,d steps".format(Locale.US, it) } ?: ""}"
+            },
+            other, WalkingColor,
+        ),
+        Triple(if (day.workouts.size == 1) day.workouts.first().title else "Workouts", burn.workouts, WorkoutColor),
+        Triple("Digesting food", burn.digestion, DigestionColor),
+    )
+    val inParts = MealType.entries.map { Triple(it.label, day.byMeal.getOrElse(it.ordinal) { 0.0 }, MealColors[it.ordinal]) }
+    val scale = maxOf(day.eatenKcal, burn.total, 1.0)
+    EnergyBar("In", day.eatenKcal, inParts.map { it.second to it.third }, scale, gapTo = burn.total.takeIf { it > day.eatenKcal }, gapColor = if (good) AppSuccess else AppDanger)
+    Spacer(Modifier.height(8.dp))
+    EnergyBar("Out", burn.total, out.map { it.second to it.third }, scale, gapTo = day.eatenKcal.takeIf { it > burn.total }, gapColor = if (good) AppSuccess else AppDanger)
+    Spacer(Modifier.height(12.dp))
+    inParts.filter { it.second > 0.5 }.forEach { (label, kcal, color) -> LegendRow(label, kcal, color) }
+    if (day.eatenKcal < 0.5) Text("Nothing logged yet. Each meal you add fills the In bar.", color = AppTextSecondary, fontSize = 13.sp)
+    Spacer(Modifier.height(6.dp))
+    out.filter { it.second > 0.5 }.forEach { (label, kcal, color) -> LegendRow(label, kcal, color) }
+    if (burn.activitySource == DailyEnergy.ActivitySource.ESTIMATE) Text("Steps not connected: everyday movement is an estimate.", color = AppTextSecondary, fontSize = 12.sp)
+    day.stats?.let { s ->
+        val inches = (s.heightCm / 2.54).roundToInt()
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Based on ${WorkoutFormat.number(s.weightKg)} kg · ${inches / 12}′${inches % 12}″ · ${s.age} y. Change your weight in Profile or log it in Measurements and everything updates.",
+            color = AppTextSecondary, fontSize = 12.sp,
+        )
+    }
+}
+
+@Composable
+private fun EnergyBar(label: String, total: Double, parts: List<Pair<Double, Color>>, scale: Double, gapTo: Double?, gapColor: Color) {
+    val animatedScale by animateFloatAsState(scale.toFloat(), tween(700), label = "scale")
+    val animated = parts.mapIndexed { i, (v, c) -> animateFloatAsState(v.toFloat(), tween(700), label = "$label$i").value to c }
+    val animatedGap by animateFloatAsState(gapTo?.toFloat() ?: 0f, tween(700), label = "${label}gap")
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.width(34.dp), color = AppTextSecondary, fontSize = 13.sp)
+        Canvas(Modifier.weight(1f).height(22.dp)) {
+            val radius = CornerRadius(6.dp.toPx())
+            drawRoundRect(AppSurfaceHigh, cornerRadius = radius)
+            val perKcal = size.width / animatedScale.coerceAtLeast(1f)
+            var x = 0f
+            animated.forEach { (v, c) ->
+                val w = v * perKcal
+                if (w > 0.5f) drawRoundRect(c, Offset(x, 0f), Size((w - 1.5f).coerceAtLeast(1f), size.height), radius)
+                x += w
+            }
+            if (gapTo != null && animatedGap * perKcal > x + 2f) {
+                drawRoundRect(
+                    gapColor, Offset(x, 1f), Size(animatedGap * perKcal - x - 1f, size.height - 2f), radius,
+                    style = Stroke(1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f))),
+                )
+            }
+        }
+        Text(total.k(), Modifier.width(58.dp), color = AppTextPrimary, fontSize = 14.sp, textAlign = TextAlign.End)
+    }
+}
+
+@Composable
+private fun LegendRow(label: String, kcal: Double, color: Color) {
+    Row(Modifier.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(8.dp).clip(CircleShape).background(color))
+        Spacer(Modifier.width(8.dp))
+        Text(label, Modifier.weight(1f), color = AppTextSecondary, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(kcal.k(), color = AppTextPrimary, fontSize = 14.sp)
+    }
+}
 
 /**
  * Last 7 finished days, each locked in at midnight: bars below the line are deficits, above are
  * surpluses. Green when the day moved you toward your goal. Tap a day to open it.
  */
 @Composable
-private fun BalanceHistoryCard(history: List<DailyBalanceEntity>, today: LocalDate, selected: LocalDate, goal: NutritionGoal, onDay: (LocalDate) -> Unit) {
+private fun WeekBalance(history: List<DailyBalanceEntity>, today: LocalDate, selected: LocalDate, goal: NutritionGoal, onDay: (LocalDate) -> Unit) {
     val days = (7 downTo 1).map { today.minusDays(it.toLong()) }
     val byDate = history.associateBy { it.date }
     val shown = days.mapNotNull { byDate[it.toString()] }
     val maxAbs = shown.maxOfOrNull { kotlin.math.abs(it.balanceKcal) }?.coerceAtLeast(100.0) ?: 100.0
     fun good(b: Double) = if (goal == NutritionGoal.GAIN) b > 0 else b <= 0
-    Surface(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), shape = RoundedCornerShape(16.dp), color = AppSurface) {
-        Column(Modifier.padding(16.dp)) {
-            Text("Daily balance", color = AppTextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-            Text("Eaten − burned, locked in at 12:00 am. Below the line = deficit.", color = AppTextSecondary, fontSize = 12.sp)
-            Spacer(Modifier.height(10.dp))
-            Row(Modifier.fillMaxWidth()) {
-                days.forEach { d ->
-                    val b = byDate[d.toString()]?.balanceKcal
-                    val color = if (b == null) AppSurfaceHigh else if (good(b)) AppSuccess else AppDanger
-                    Column(
-                        Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
-                            .background(if (d == selected) AppSurfaceHigh else AppSurface)
-                            .clickable { onDay(d) }.padding(vertical = 4.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text(b?.let { signed(it) } ?: "—", color = if (b == null) AppTextSecondary else color, fontSize = 11.sp, maxLines = 1)
-                        val half = 34.dp
-                        val frac = ((b?.let { kotlin.math.abs(it) } ?: 0.0) / maxAbs).toFloat().coerceIn(0f, 1f)
-                        Box(Modifier.height(half).width(14.dp), contentAlignment = Alignment.BottomCenter) {
-                            if (b != null && b > 0) Box(Modifier.fillMaxWidth().height(half * frac).clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)).background(color))
-                        }
-                        Box(Modifier.width(22.dp).height(1.dp).background(AppTextSecondary))
-                        Box(Modifier.height(half).width(14.dp), contentAlignment = Alignment.TopCenter) {
-                            if (b != null && b <= 0) Box(Modifier.fillMaxWidth().height(half * frac).clip(RoundedCornerShape(bottomStart = 4.dp, bottomEnd = 4.dp)).background(color))
-                        }
-                        Text(d.format(DateTimeFormatter.ofPattern("EEE", Locale.US)), color = AppTextSecondary, fontSize = 11.sp)
-                    }
+    Text("Eaten − burned, locked in at 12:00 am. Below the line = deficit.", color = AppTextSecondary, fontSize = 12.sp)
+    Spacer(Modifier.height(10.dp))
+    Row(Modifier.fillMaxWidth()) {
+        days.forEach { d ->
+            val b = byDate[d.toString()]?.balanceKcal
+            val color = if (b == null) AppSurfaceHigh else if (good(b)) AppSuccess else AppDanger
+            Column(
+                Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
+                    .background(if (d == selected) AppSurfaceHigh else AppSurface)
+                    .clickable { onDay(d) }.padding(vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(b?.let { signed(it) } ?: "—", color = if (b == null) AppTextSecondary else color, fontSize = 11.sp, maxLines = 1)
+                val half = 34.dp
+                val frac = ((b?.let { kotlin.math.abs(it) } ?: 0.0) / maxAbs).toFloat().coerceIn(0f, 1f)
+                Box(Modifier.height(half).width(14.dp), contentAlignment = Alignment.BottomCenter) {
+                    if (b != null && b > 0) Box(Modifier.fillMaxWidth().height(half * frac).clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)).background(color))
                 }
-            }
-            Spacer(Modifier.height(8.dp))
-            if (shown.isEmpty()) {
-                Text("Each day gets its number after midnight once you've logged food that day.", color = AppTextSecondary, fontSize = 13.sp)
-            } else {
-                val total = shown.sumOf { it.balanceKcal }
-                Text(
-                    "Last 7 days: ${signed(total)} kcal · ${signed(total / shown.size)}/day avg over ${shown.size} logged day${if (shown.size == 1) "" else "s"}",
-                    color = AppTextPrimary, fontSize = 14.sp,
-                )
+                Box(Modifier.width(22.dp).height(1.dp).background(AppTextSecondary))
+                Box(Modifier.height(half).width(14.dp), contentAlignment = Alignment.TopCenter) {
+                    if (b != null && b <= 0) Box(Modifier.fillMaxWidth().height(half * frac).clip(RoundedCornerShape(bottomStart = 4.dp, bottomEnd = 4.dp)).background(color))
+                }
+                Text(d.format(DateTimeFormatter.ofPattern("EEE", Locale.US)), color = AppTextSecondary, fontSize = 11.sp)
             }
         }
     }
-}
-
-@Composable
-private fun BurnRow(label: String, kcal: Double) {
-    Row {
-        Text(label, Modifier.weight(1f), color = AppTextSecondary, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(kcal.k(), color = AppTextPrimary, fontSize = 14.sp)
+    Spacer(Modifier.height(8.dp))
+    if (shown.isEmpty()) {
+        Text("Each day gets its number after midnight once you've logged food that day.", color = AppTextSecondary, fontSize = 13.sp)
+    } else {
+        val total = shown.sumOf { it.balanceKcal }
+        Text(
+            "Last 7 days: ${signed(total)} kcal · ${signed(total / shown.size)}/day avg over ${shown.size} logged day${if (shown.size == 1) "" else "s"}",
+            color = AppTextPrimary, fontSize = 14.sp,
+        )
     }
 }
 
 @Composable
-private fun FoodRow(e: FoodEntryEntity, onDelete: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 2.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun FoodRow(e: FoodEntryEntity, onClick: () -> Unit, onDelete: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 34.dp, end = 4.dp, top = 2.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(e.name, color = AppTextPrimary, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                listOfNotNull(e.grams?.let { "${it.roundToInt()} g" }, "${e.proteinG.roundToInt()} g protein", "${e.carbsG.roundToInt()} C · ${e.fatG.roundToInt()} F").joinToString(" · "),
+                listOfNotNull(e.grams?.let { "${it.roundToInt()} g" }, "${e.proteinG.roundToInt()} P · ${e.carbsG.roundToInt()} C · ${e.fatG.roundToInt()} F").joinToString(" · "),
                 color = AppTextSecondary, fontSize = 13.sp,
             )
         }
         Text("${e.kcal.roundToInt()}", color = AppTextPrimary, fontSize = 16.sp)
         IconButton(onClick = onDelete) { Icon(Icons.Outlined.Close, "Delete ${e.name}", tint = AppTextSecondary, modifier = Modifier.size(18.dp)) }
+    }
+}
+
+/** A logged meal: fix items by hand, or tell the AI what changed and it edits the entries in place. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditMealSheet(meal: MealType, logged: List<FoodEntryEntity>, viewModel: NutritionViewModel, onEditItem: (FoodEntryEntity) -> Unit, onDismiss: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var instruction by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var proposal by remember { mutableStateOf<List<FoodRevision>?>(null) }
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = AppSurface) {
+        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 680.dp).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            item {
+                Text("Edit ${meal.label.lowercase()}", color = AppTextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Text("${logged.sumOf { it.kcal.toDouble() }.k()} kcal. Tap an item to change it by hand.", color = AppTextSecondary, fontSize = 13.sp)
+            }
+            items(logged, key = { it.id }) { e ->
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { onEditItem(e) }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(e.name, color = AppTextPrimary, fontSize = 15.sp)
+                        Text("${e.grams?.let { "${it.roundToInt()} g · " } ?: ""}${e.proteinG.roundToInt()} P · ${e.carbsG.roundToInt()} C · ${e.fatG.roundToInt()} F", color = AppTextSecondary, fontSize = 13.sp)
+                    }
+                    Text("${e.kcal.roundToInt()} kcal", color = AppTextPrimary, fontSize = 15.sp)
+                }
+            }
+            item {
+                Spacer(Modifier.height(4.dp))
+                OutlinedTextField(
+                    instruction, { instruction = it; proposal = null }, Modifier.fillMaxWidth(),
+                    label = { Text("Tell the AI what changed") },
+                    placeholder = { Text("e.g. I only ate half · no butter · the rice was 150 g · also had a Coke") },
+                )
+                Spacer(Modifier.height(8.dp))
+                PrimaryButton("Update with AI", onClick = {
+                    busy = true
+                    error = null
+                    scope.launch {
+                        when (val r = viewModel.revise(meal, instruction.trim())) {
+                            is AiResult.Success -> proposal = r.data
+                            is AiResult.Failure -> error = r.message
+                        }
+                        busy = false
+                    }
+                }, modifier = Modifier.fillMaxWidth(), enabled = instruction.isNotBlank() && logged.isNotEmpty(), loading = busy)
+                error?.let { Text(it, Modifier.padding(top = 6.dp), color = AppDanger, fontSize = 14.sp) }
+            }
+            proposal?.let { p ->
+                item { RevisionPreview(logged, p) }
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SecondaryButton("Discard", onClick = { proposal = null }, modifier = Modifier.weight(1f))
+                        PrimaryButton("Apply changes", onClick = { viewModel.applyRevision(meal, p); onDismiss() }, modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+            item {
+                TextButton(onClick = { viewModel.deleteMeal(meal); onDismiss() }) {
+                    Icon(Icons.Outlined.Delete, null, tint = AppDanger)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Delete whole ${meal.label.lowercase()}", color = AppDanger)
+                }
+                Spacer(Modifier.height(24.dp))
+            }
+        }
+    }
+}
+
+/** What the AI wants to change, before anything is saved. */
+@Composable
+private fun RevisionPreview(current: List<FoodEntryEntity>, proposal: List<FoodRevision>) {
+    val byId = current.associateBy { it.id }
+    Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), color = AppSurfaceHigh) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Proposed changes", color = AppTextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            proposal.forEach { r ->
+                val old = byId[r.id]
+                val f = r.food
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(f.name + if (old == null) " (new)" else "", color = AppTextPrimary, fontSize = 14.sp)
+                        Text("${f.grams?.let { "${it.roundToInt()} g · " } ?: ""}${f.proteinG.roundToInt()} P · ${f.carbsG.roundToInt()} C · ${f.fatG.roundToInt()} F", color = AppTextSecondary, fontSize = 12.sp)
+                    }
+                    val now = f.kcal.roundToInt()
+                    val before = old?.kcal?.roundToInt()
+                    Text(if (before != null && before != now) "$before → $now" else "$now", color = if (before != null && before != now) AppPrimary else AppTextPrimary, fontSize = 14.sp)
+                }
+            }
+            current.filter { c -> proposal.none { it.id == c.id } }.forEach {
+                Row {
+                    Text(it.name, Modifier.weight(1f), color = AppTextSecondary, fontSize = 14.sp, textDecoration = TextDecoration.LineThrough)
+                    Text("removed", color = AppDanger, fontSize = 14.sp)
+                }
+            }
+            Text(
+                "Meal: ${current.sumOf { it.kcal.toDouble() }.k()} → ${proposal.sumOf { it.food.kcal.toDouble() }.k()} kcal",
+                color = AppTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+            )
+        }
     }
 }
 
@@ -568,7 +919,7 @@ private fun Float.field(): String = if (this % 1f == 0f) roundToInt().toString()
 
 /** Manual entry, or (with [initial]) fixing an AI estimate; changing grams rescales the rest. */
 @Composable
-private fun ManualDialog(initial: FoodEstimate? = null, onDismiss: () -> Unit, onAdd: (FoodEstimate) -> Unit) {
+private fun ManualDialog(initial: FoodEstimate? = null, onDelete: (() -> Unit)? = null, onDismiss: () -> Unit, onAdd: (FoodEstimate) -> Unit) {
     var name by remember { mutableStateOf(initial?.name.orEmpty()) }
     var kcal by remember { mutableStateOf(initial?.kcal?.field().orEmpty()) }
     var protein by remember { mutableStateOf(initial?.proteinG?.field().orEmpty()) }
@@ -611,7 +962,12 @@ private fun ManualDialog(initial: FoodEstimate? = null, onDismiss: () -> Unit, o
                 enabled = name.isNotBlank() && num(kcal) != null,
             ) { Text(if (initial == null) "Add" else "Save", color = AppPrimary) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = AppTextSecondary) } },
+        dismissButton = {
+            Row {
+                if (onDelete != null) TextButton(onClick = onDelete) { Text("Delete", color = AppDanger) }
+                TextButton(onClick = onDismiss) { Text("Cancel", color = AppTextSecondary) }
+            }
+        },
     )
 }
 
@@ -642,7 +998,7 @@ private fun GoalsSheet(goal: NutritionGoal, kcal: Int?, protein: Int?, watts: Do
                 }
             }
             Text(
-                "Target = what you typically burn (last 7 days) adjusted for your goal. Protein: 2.0 g/kg while losing fat, 1.6 g/kg otherwise.",
+                "Target = what you typically burn (last 7 days) adjusted for your goal. Protein: 2.0 g/kg while losing fat, 1.6 g/kg otherwise. Fat: 25% of calories. Carbs: the rest.",
                 color = AppTextSecondary, fontSize = 13.sp,
             )
             OutlinedTextField(kcalText, { kcalText = it.filter(Char::isDigit).take(5) }, label = { Text("Calorie target override (blank = automatic)") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())

@@ -69,4 +69,12 @@ class EnergyMathTest {
         assertTrue(!EnergyMath.countsSteps("Cycling"))
         assertTrue(EnergyMath.countsSteps("Treadmill"))
     }
+
+    @Test
+    fun `macro targets give fat a quarter of calories and carbs the rest`() {
+        val m = EnergyMath.macroTargets(kcal = 2280, proteinG = 126)
+        assertEquals(63, m.fatG)
+        assertEquals(302, m.carbsG)
+        assertEquals(2280.0, m.proteinG * 4.0 + m.carbsG * 4.0 + m.fatG * 9.0, 10.0)
+    }
 }

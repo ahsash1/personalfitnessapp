@@ -13,7 +13,16 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /** Steps and active calories for a time range, with workout windows taken out (the app estimates those itself). */
-data class HealthActivity(val steps: Long?, val activeKcal: Double?)
+/**
+ * [steps]/[activeKcal] leave out logged-workout windows (used for calories); [totalSteps] and
+ * [totalActiveKcal] are the whole period, matching what Samsung Health itself shows.
+ */
+data class HealthActivity(
+    val steps: Long?,
+    val activeKcal: Double?,
+    val totalSteps: Long? = steps,
+    val totalActiveKcal: Double? = activeKcal,
+)
 
 /**
  * Read-only bridge to Health Connect (developer.android.com/health-and-fitness/guides/health-connect).
@@ -67,7 +76,7 @@ class HealthConnectSource @Inject constructor(@ApplicationContext private val co
                 outSteps += s ?: 0
                 outKcal += k ?: 0.0
             }
-            HealthActivity(steps?.minus(outSteps)?.coerceAtLeast(0), kcal?.minus(outKcal)?.coerceAtLeast(0.0))
+            HealthActivity(steps?.minus(outSteps)?.coerceAtLeast(0), kcal?.minus(outKcal)?.coerceAtLeast(0.0), steps, kcal)
         }.getOrDefault(HealthActivity(null, null))
     }
 }
