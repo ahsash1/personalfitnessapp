@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -29,6 +30,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.personalfitnessapp.ui.browser.ExerciseBrowserScreen
 import com.example.personalfitnessapp.ui.coach.CoachChatScreen
 import com.example.personalfitnessapp.ui.detail.ExerciseDetailScreen
+import com.example.personalfitnessapp.ui.nutrition.NutritionScreen
 import com.example.personalfitnessapp.ui.stats.CalendarScreen
 import com.example.personalfitnessapp.ui.stats.StatisticsScreen
 import com.example.personalfitnessapp.ui.metrics.BodyMetricsScreen
@@ -68,6 +70,7 @@ object Routes {
     const val HOME = "home"
     const val WORKOUT_TAB = "workout_tab"
     const val PROFILE = "profile"
+    const val NUTRITION = "nutrition"
     const val EXERCISE_BROWSER = "exercise_browser"
     const val EXERCISE_DETAIL = "exercise_detail/{exerciseId}?add={add}&tab={tab}"
     const val SETTINGS = "settings"
@@ -112,6 +115,7 @@ object Routes {
 private val TOP_LEVEL_ROUTES = setOf(
     Routes.HOME,
     Routes.WORKOUT_TAB,
+    Routes.NUTRITION,
     Routes.PROFILE,
 )
 
@@ -182,6 +186,7 @@ fun AppNavHost(
                     onCoach = { navController.navigate(Routes.COACH) },
                 )
             }
+            composable(Routes.NUTRITION) { NutritionScreen() }
             composable(Routes.PROFILE) {
                 ProfileScreen(
                     onExercisesClick = { navController.navigate(Routes.EXERCISE_BROWSER) },
@@ -425,6 +430,12 @@ private fun AppBottomBar(navController: NavHostController, currentEntry: NavBack
             onClick = { navController.navigateToTopLevel(Routes.WORKOUT_TAB) },
             icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
             label = { Text("Workout") },
+        )
+        NavigationBarItem(
+            selected = currentRoute == Routes.NUTRITION,
+            onClick = { navController.navigateToTopLevel(Routes.NUTRITION) },
+            icon = { Icon(Icons.Default.Restaurant, contentDescription = null) },
+            label = { Text("Food") },
         )
         NavigationBarItem(
             selected = currentRoute == Routes.PROFILE,

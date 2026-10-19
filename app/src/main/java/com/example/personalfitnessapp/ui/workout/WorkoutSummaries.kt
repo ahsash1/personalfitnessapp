@@ -56,6 +56,7 @@ object Summaries {
         sets: List<SetLogEntity>,
         catalog: Map<String, ExerciseEntity>,
         weightKg: Double? = null,
+        wattsPerLevel: Double = 10.0,
     ): WorkoutSummary {
         val setsByExercise = sets.groupBy { it.exerciseId }.mapValues { (_, l) -> l.sortedBy { it.setIndex } }
         val ordered = exerciseRows.sortedBy { it.order }.map { it.exerciseId to it.note }.distinctBy { it.first }
@@ -88,11 +89,11 @@ object Summaries {
             records = sets.sumOf { Records.decode(it.prBadges).size },
             exercises = exercises,
             media = session.mediaUris.orEmpty(),
-            kcal = weightKg?.let { kg -> energy(exercises, ((session.endedAt ?: session.startedAt) - session.startedAt) / 60_000.0, kg).total.toInt() },
+            kcal = weightKg?.let { kg -> energy(exercises, ((session.endedAt ?: session.startedAt) - session.startedAt) / 60_000.0, kg, wattsPerLevel).total.toInt() },
         )
     }
 
-    fun energy(exercises: List<SummaryExercise>, sessionMinutes: Double, weightKg: Double): com.example.personalfitnessapp.domain.EnergyMath.WorkoutEnergy =
+    fun energy(exercises: List<SummaryExercise>, sessionMinutes: Double, weightKg: Double, wattsPerLevel: Double = 10.0): com.example.personalfitnessapp.domain.EnergyMath.WorkoutEnergy =
         com.example.personalfitnessapp.domain.EnergyMath.workout(
             exercises.flatMap { ex ->
                 ex.sets.filter { it.type != SetType.WARMUP || ex.type == ExerciseType.DISTANCE_DURATION }.map { s ->
@@ -101,7 +102,7 @@ object Summaries {
                     )
                 }
             },
-            sessionMinutes, weightKg,
+            sessionMinutes, weightKg, wattsPerLevel,
         )
 
     fun setText(ex: SummaryExercise, set: SetLogEntity): String =
@@ -151,7 +152,7 @@ class WorkoutSummariesSource @Inject constructor(
         val catalog = all.associateBy { it.id }
         val setsBySession = sets.groupBy { it.sessionId }
         val rowsBySession = rows.groupBy { it.sessionId }
-        sessions.map { Summaries.build(it, rowsBySession[it.id].orEmpty(), setsBySession[it.id].orEmpty(), catalog, stats?.weightKg) }
+        sessions.map { Summaries.build(it, rowsBySession[it.id].orEmpty(), setsBySession[it.id].orEmpty(), catalog, stats?.weightKg, stats?.bikeWattsPerLevel ?: 10.0) }
     }
 }
 

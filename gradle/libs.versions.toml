@@ -16,6 +16,8 @@ kotlinxSerializationJson = "1.7.3"
 coroutines = "1.10.2"
 navigationCompose = "2.10.2"
 coil = "3.6.3"
+healthConnect = "1.1.0"
+codeScanner = "16.1.0"
 datastore = "1.2.1"
 vico = "3.3.1"
 okhttp = "5.5.0"
@@ -23,6 +25,10 @@ camerax = "1.6.2"
 exifinterface = "1.4.2"
 
 [libraries]
+# Health Connect: reads steps/active calories that Samsung Health syncs (no Samsung SDK needed).
+androidx-health-connect-client = { group = "androidx.health.connect", name = "connect-client", version.ref = "healthConnect" }
+# Google code scanner: barcode scanning UI from Play services, no camera permission or ML model in the APK.
+play-services-code-scanner = { group = "com.google.android.gms", name = "play-services-code-scanner", version.ref = "codeScanner" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }

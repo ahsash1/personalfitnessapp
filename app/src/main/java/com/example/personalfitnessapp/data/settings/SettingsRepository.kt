@@ -30,6 +30,36 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         val BAR_WEIGHT = doublePreferencesKey("bar_weight_kg")
         val PREVIOUS_MODE = stringPreferencesKey("previous_values_mode")
         val DISPLAY_NAME = stringPreferencesKey("display_name")
+        val NUTRITION_GOAL = stringPreferencesKey("nutrition_goal")
+        val KCAL_TARGET = intPreferencesKey("kcal_target_override")
+        val PROTEIN_TARGET = intPreferencesKey("protein_target_override")
+        val WATTS_PER_LEVEL = doublePreferencesKey("bike_watts_per_level")
+    }
+
+    /** Food goals; target overrides of 0 or less mean "work it out from my data". */
+    val nutritionPrefs: Flow<NutritionPrefs> = context.dataStore.data.map { p ->
+        NutritionPrefs(
+            goal = p[Keys.NUTRITION_GOAL]?.let { g -> NutritionGoal.entries.firstOrNull { it.name == g } } ?: NutritionGoal.RECOMP,
+            kcalTargetOverride = p[Keys.KCAL_TARGET]?.takeIf { it > 0 },
+            proteinTargetOverride = p[Keys.PROTEIN_TARGET]?.takeIf { it > 0 },
+            bikeWattsPerLevel = p[Keys.WATTS_PER_LEVEL] ?: 10.0,
+        )
+    }
+
+    suspend fun updateNutritionPrefs(transform: (NutritionPrefs) -> NutritionPrefs) {
+        context.dataStore.edit { p ->
+            val current = NutritionPrefs(
+                goal = p[Keys.NUTRITION_GOAL]?.let { g -> NutritionGoal.entries.firstOrNull { it.name == g } } ?: NutritionGoal.RECOMP,
+                kcalTargetOverride = p[Keys.KCAL_TARGET]?.takeIf { it > 0 },
+                proteinTargetOverride = p[Keys.PROTEIN_TARGET]?.takeIf { it > 0 },
+                bikeWattsPerLevel = p[Keys.WATTS_PER_LEVEL] ?: 10.0,
+            )
+            val next = transform(current)
+            p[Keys.NUTRITION_GOAL] = next.goal.name
+            p[Keys.KCAL_TARGET] = next.kcalTargetOverride ?: 0
+            p[Keys.PROTEIN_TARGET] = next.proteinTargetOverride ?: 0
+            p[Keys.WATTS_PER_LEVEL] = next.bikeWattsPerLevel
+        }
     }
 
     /** Workout Settings (docs/screens/workout_settings.md); keep-awake shares the older key. */
@@ -113,3 +143,22 @@ data class WorkoutPrefs(
         const val REST_SMART = -1
     }
 }
+
+/**
+ * Daily calorie offset from what you burn. ~500 kcal/day below burn is ~0.5 kg/week of fat for
+ * most people; recomposition uses a small deficit with high protein; lean gain a small surplus.
+ */
+enum class NutritionGoal(val label: String, val kcalOffset: Int) {
+    LOSE("Lose fat (-500 kcal)", -500),
+    RECOMP("Lose fat, keep building muscle (-250 kcal)", -250),
+    MAINTAIN("Maintain", 0),
+    GAIN("Build muscle, lean gain (+250 kcal)", 250),
+}
+
+data class NutritionPrefs(
+    val goal: NutritionGoal = NutritionGoal.RECOMP,
+    val kcalTargetOverride: Int? = null,
+    val proteinTargetOverride: Int? = null,
+    /** Stationary bike power per resistance level, for calorie estimates (watts = 25 + this x level). */
+    val bikeWattsPerLevel: Double = 10.0,
+)

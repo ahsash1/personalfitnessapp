@@ -162,6 +162,53 @@ class ResilientAiService @Inject constructor(
     }
 
     /** A malformed JSON answer counts as that model failing, so the next model gets a turn. */
+    override suspend fun estimateFood(description: String?, imageBytes: ByteArray?): AiResult<List<FoodEstimate>> {
+        val schema = buildJsonObject {
+            put("type", "object")
+            putJsonObject("properties") {
+                putJsonObject("items") {
+                    put("type", "array")
+                    putJsonObject("items") {
+                        put("type", "object")
+                        putJsonObject("properties") {
+                            putJsonObject("name") { put("type", "string") }
+                            putJsonObject("grams") { put("type", "number") }
+                            putJsonObject("kcal") { put("type", "number") }
+                            putJsonObject("protein_g") { put("type", "number") }
+                            putJsonObject("carbs_g") { put("type", "number") }
+                            putJsonObject("fat_g") { put("type", "number") }
+                        }
+                        putJsonArray("required") { listOf("name", "grams", "kcal", "protein_g", "carbs_g", "fat_g").forEach { add(it) } }
+                    }
+                }
+            }
+            putJsonArray("required") { add("items") }
+        }
+        val prompt = buildString {
+            append("You are a nutrition estimator for a calorie tracker. Split the meal into separate foods and ")
+            append("estimate each one's eaten weight in grams, calories and protein/carbs/fat in grams for that amount. ")
+            append("Use standard food-composition values (USDA-style); any cuisine. When the portion isn't stated, ")
+            append("assume a typical single serving. For home-cooked dishes include typical cooking oil or ghee. ")
+            append("If the user gives quantities (\"2 rotis\", \"150 g chicken\", \"1 scoop whey\") use them exactly.")
+            if (description != null) append("\n\nMeal: ").append(description)
+            if (imageBytes != null) append("\n\nEstimate from the photo; judge portion size from plate and cutlery.")
+        }
+        return structured(prompt, schema, imageBytes) { obj ->
+            (obj["items"] as kotlinx.serialization.json.JsonArray).map { el ->
+                val o = el as JsonObject
+                fun num(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toFloatOrNull() ?: 0f
+                FoodEstimate(
+                    name = (o["name"] as kotlinx.serialization.json.JsonPrimitive).content,
+                    grams = num("grams").takeIf { it > 0 },
+                    kcal = num("kcal"),
+                    proteinG = num("protein_g"),
+                    carbsG = num("carbs_g"),
+                    fatG = num("fat_g"),
+                )
+            }.also { require(it.isNotEmpty()) }
+        }
+    }
+
     private suspend fun <T> structured(
         prompt: String,
         schema: JsonObject,

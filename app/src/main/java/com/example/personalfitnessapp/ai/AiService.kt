@@ -25,6 +25,13 @@ interface AiService {
      * a model fails part-way and the exchange is retried on another one, so tools must be
      * safe to repeat.
      */
+    /**
+     * Splits a meal description and/or photo into foods with estimated portions, calories and
+     * macros. Estimates, not measurements: home-cooked oil and portion size are the big unknowns.
+     */
+    suspend fun estimateFood(description: String?, imageBytes: ByteArray?): AiResult<List<FoodEstimate>> =
+        AiResult.Failure("Food estimates aren't available.", retryable = false)
+
     suspend fun chat(
         systemInstruction: String,
         tools: List<ToolDeclaration>,

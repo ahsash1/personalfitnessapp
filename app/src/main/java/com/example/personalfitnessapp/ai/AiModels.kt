@@ -33,3 +33,13 @@ data class ToolDeclaration(val name: String, val description: String, val parame
 data class ToolCall(val id: String, val name: String, val arguments: JsonObject)
 
 data class ToolResult(val callId: String, val name: String, val content: String)
+
+/** One food from an AI meal estimate; macros are for the [grams] eaten. */
+data class FoodEstimate(
+    val name: String,
+    val grams: Float?,
+    val kcal: Float,
+    val proteinG: Float,
+    val carbsG: Float,
+    val fatG: Float,
+)
