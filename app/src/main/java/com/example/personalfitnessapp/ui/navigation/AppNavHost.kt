@@ -29,7 +29,8 @@ import androidx.navigation.compose.rememberNavController
 import com.example.personalfitnessapp.ui.browser.ExerciseBrowserScreen
 import com.example.personalfitnessapp.ui.coach.CoachChatScreen
 import com.example.personalfitnessapp.ui.detail.ExerciseDetailScreen
-import com.example.personalfitnessapp.ui.history.SessionHistoryScreen
+import com.example.personalfitnessapp.ui.stats.CalendarScreen
+import com.example.personalfitnessapp.ui.stats.StatisticsScreen
 import com.example.personalfitnessapp.ui.metrics.BodyMetricsScreen
 import com.example.personalfitnessapp.ui.onboarding.OnboardingScreen
 import com.example.personalfitnessapp.ui.photo.PhotoCaptureScreen
@@ -75,7 +76,8 @@ object Routes {
     const val SAVE_WORKOUT = "save_workout"
     const val CELEBRATION = "celebration/{sessionId}"
     const val EXERCISE_PICKER = "exercise_picker"
-    const val SESSION_HISTORY = "session_history"
+    const val CALENDAR = "calendar"
+    const val STATISTICS = "statistics"
     const val BODY_METRICS = "body_metrics"
     const val COACH = "coach"
     const val SESSION_DETAIL = "session_detail/{sessionId}"
@@ -127,7 +129,7 @@ fun AppNavHost(
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val route = backStackEntry?.destination?.route
-    val showBottomBar = route in TOP_LEVEL_ROUTES || route == Routes.SESSION_DETAIL
+    val showBottomBar = route in TOP_LEVEL_ROUTES || route in setOf(Routes.SESSION_DETAIL, Routes.STATISTICS, Routes.CALENDAR)
     val pillViewModel: WorkoutPillViewModel = hiltViewModel()
     val activeWorkout by pillViewModel.active.collectAsState()
     val menuNav = MenuNav(
@@ -180,10 +182,26 @@ fun AppNavHost(
                 ProfileScreen(
                     onExercisesClick = { navController.navigate(Routes.EXERCISE_BROWSER) },
                     onMeasuresClick = { navController.navigate(Routes.BODY_METRICS) },
-                    onCalendarClick = { navController.navigate(Routes.SESSION_HISTORY) },
-                    onStatisticsClick = { navController.navigate(Routes.RECOVERY) },
+                    onCalendarClick = { navController.navigate(Routes.CALENDAR) },
+                    onStatisticsClick = { navController.navigate(Routes.STATISTICS) },
+                    onRecoveryClick = { navController.navigate(Routes.RECOVERY) },
                     onCoachClick = { navController.navigate(Routes.COACH) },
                     onSettingsClick = { navController.navigate(Routes.SETTINGS) },
+                    onWorkoutClick = { id -> navController.navigate(Routes.sessionDetail(id)) },
+                    onExerciseClick = { id -> navController.navigate(Routes.exerciseDetail(id)) },
+                    nav = menuNav,
+                )
+            }
+            composable(Routes.STATISTICS) {
+                StatisticsScreen(
+                    onBack = { navController.popBackStack() },
+                    onExerciseClick = { id -> navController.navigate(Routes.exerciseDetail(id)) },
+                )
+            }
+            composable(Routes.CALENDAR) {
+                CalendarScreen(
+                    onBack = { navController.popBackStack() },
+                    onWorkoutClick = { id -> navController.navigate(Routes.sessionDetail(id)) },
                 )
             }
             composable(Routes.EXERCISE_BROWSER) {
@@ -305,15 +323,6 @@ fun AppNavHost(
                         navController.popBackStack()
                     },
                     onBackClick = { navController.popBackStack() },
-                )
-            }
-            composable(Routes.SESSION_HISTORY) { entry ->
-                val justDeleted = entry.savedStateHandle.get<Boolean>("sessionDeleted") == true
-                SessionHistoryScreen(
-                    onSessionClick = { id -> navController.navigate(Routes.sessionDetail(id)) },
-                    onBackClick = { navController.popBackStack() },
-                    justDeleted = justDeleted,
-                    onDeletedMessageShown = { entry.savedStateHandle.remove<Boolean>("sessionDeleted") },
                 )
             }
             composable(Routes.SESSION_DETAIL) {

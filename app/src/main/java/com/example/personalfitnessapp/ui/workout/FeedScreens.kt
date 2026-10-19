@@ -99,22 +99,12 @@ abstract class WorkoutMenuViewModel(protected val actions: WorkoutActions) : Vie
 
 @HiltViewModel
 class HomeFeedViewModel @Inject constructor(
-    log: WorkoutLogRepository,
-    exercises: ExerciseRepository,
+    source: WorkoutSummariesSource,
     settings: SettingsRepository,
     actions: WorkoutActions,
 ) : WorkoutMenuViewModel(actions) {
-    val feed: StateFlow<List<WorkoutSummary>?> = combine(
-        log.observeFinished(),
-        log.observeFinishedSets(),
-        log.observeFinishedSessionExercises(),
-        exercises.observeAll(),
-    ) { sessions, sets, rows, all ->
-        val catalog = all.associateBy { it.id }
-        val setsBySession = sets.groupBy { it.sessionId }
-        val rowsBySession = rows.groupBy { it.sessionId }
-        sessions.map { Summaries.build(it, rowsBySession[it.id].orEmpty(), setsBySession[it.id].orEmpty(), catalog) }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    val feed: StateFlow<List<WorkoutSummary>?> = source.summaries
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val name: StateFlow<String> = settings.displayName.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "Me")
 }
@@ -217,7 +207,7 @@ fun HomeFeedScreen(
 }
 
 @Composable
-private fun FeedCard(s: WorkoutSummary, name: String, now: Long, onClick: () -> Unit, onMenu: () -> Unit, onExerciseClick: (String) -> Unit) {
+internal fun FeedCard(s: WorkoutSummary, name: String, now: Long, onClick: () -> Unit, onMenu: () -> Unit, onExerciseClick: (String) -> Unit) {
     Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             LetterAvatar(name, 52.dp)

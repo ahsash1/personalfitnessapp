@@ -29,6 +29,8 @@ data class SummaryExercise(
     val type: ExerciseType,
     val note: String?,
     val sets: List<SetLogEntity>,
+    val primary: List<com.example.personalfitnessapp.data.model.Muscle> = emptyList(),
+    val secondary: List<com.example.personalfitnessapp.data.model.Muscle> = emptyList(),
 )
 
 /** A finished workout as shown on feed cards, Workout Detail and the celebration screen. */
@@ -65,6 +67,8 @@ object Summaries {
                 type = entity?.let(ExerciseTypes::of) ?: ExerciseType.WEIGHT_REPS,
                 note = note,
                 sets = list,
+                primary = entity?.primaryMuscles.orEmpty(),
+                secondary = entity?.secondaryMuscles.orEmpty(),
             )
         }
         val volume = exercises.filter { it.type == ExerciseType.WEIGHT_REPS }
@@ -111,6 +115,24 @@ fun restSecondsFor(exercise: ExerciseEntity, prefs: WorkoutPrefs): Int {
     if (ExerciseTypes.isCardio(ExerciseTypes.of(exercise))) return 0
     val pref = prefs.defaultRestSeconds
     return if (pref == WorkoutPrefs.REST_SMART) RestCategoryClassifier.defaultRestSeconds(exercise) else pref
+}
+
+/** Every finished workout as a [WorkoutSummary], newest first; shared by the feed, Profile, Statistics and Calendar. */
+class WorkoutSummariesSource @Inject constructor(
+    log: WorkoutLogRepository,
+    exercises: com.example.personalfitnessapp.data.repository.ExerciseRepository,
+) {
+    val summaries: kotlinx.coroutines.flow.Flow<List<WorkoutSummary>> = kotlinx.coroutines.flow.combine(
+        log.observeFinished(),
+        log.observeFinishedSets(),
+        log.observeFinishedSessionExercises(),
+        exercises.observeAll(),
+    ) { sessions, sets, rows, all ->
+        val catalog = all.associateBy { it.id }
+        val setsBySession = sets.groupBy { it.sessionId }
+        val rowsBySession = rows.groupBy { it.sessionId }
+        sessions.map { Summaries.build(it, rowsBySession[it.id].orEmpty(), setsBySession[it.id].orEmpty(), catalog) }
+    }
 }
 
 /** The feed card / Workout Detail ••• menu actions (docs/screens/home.md). */
