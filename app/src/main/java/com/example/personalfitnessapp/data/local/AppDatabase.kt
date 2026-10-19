@@ -47,8 +47,9 @@ import com.example.personalfitnessapp.data.local.entity.WorkoutSessionEntity
         SessionExerciseEntity::class,
         ChatMessageEntity::class,
         com.example.personalfitnessapp.data.local.entity.FoodEntryEntity::class,
+        com.example.personalfitnessapp.data.local.entity.DailyBalanceEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -68,6 +69,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun chatMessageDao(): ChatMessageDao
     abstract fun workoutLogDao(): WorkoutLogDao
     abstract fun foodDao(): com.example.personalfitnessapp.data.local.dao.FoodDao
+    abstract fun dailyBalanceDao(): com.example.personalfitnessapp.data.local.dao.DailyBalanceDao
 
     companion object {
         const val DATABASE_NAME = "personal_fitness_app.db"

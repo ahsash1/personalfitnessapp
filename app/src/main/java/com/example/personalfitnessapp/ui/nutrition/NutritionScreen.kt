@@ -3,13 +3,16 @@ package com.example.personalfitnessapp.ui.nutrition
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -62,7 +65,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -77,6 +82,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.example.personalfitnessapp.ai.AiResult
 import com.example.personalfitnessapp.ai.FoodEstimate
+import com.example.personalfitnessapp.data.local.entity.DailyBalanceEntity
 import com.example.personalfitnessapp.data.local.entity.FoodEntryEntity
 import com.example.personalfitnessapp.data.local.entity.FoodSource
 import com.example.personalfitnessapp.data.local.entity.MealType
@@ -119,6 +125,7 @@ fun NutritionScreen(viewModel: NutritionViewModel = hiltViewModel()) {
     val activity by viewModel.healthActivity.collectAsState()
     val week by viewModel.weekAverage.collectAsState()
     val healthStatus by viewModel.healthStatus.collectAsState()
+    val history by viewModel.history.collectAsState()
     val context = LocalContext.current
     var addFor by remember { mutableStateOf<MealType?>(null) }
     var showSettings by remember { mutableStateOf(false) }
@@ -127,7 +134,7 @@ fun NutritionScreen(viewModel: NutritionViewModel = hiltViewModel()) {
         onPauseOrDispose { }
     }
     val connect = rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) { viewModel.refresh() }
-    val day = viewModel.day(entries, summaries, stats, prefs, activity, week)
+    val day = viewModel.day(entries, summaries, stats, prefs, activity, week, history)
     val today = LocalDate.now()
 
     LazyColumn(Modifier.fillMaxSize().background(AppBackground).statusBarsPadding()) {
@@ -155,6 +162,7 @@ fun NutritionScreen(viewModel: NutritionViewModel = hiltViewModel()) {
                     )
                 }
             })
+            BalanceHistoryCard(history, today, date, prefs.goal) { viewModel.showDay(it) }
             if (stats == null) Text("Finish your profile (age, height, weight) in Settings so calories can be worked out.", Modifier.padding(16.dp), color = AppDanger)
         }
         MealType.entries.forEach { meal ->
@@ -238,17 +246,19 @@ private fun BurnedCard(day: DayNutrition, status: HealthStatus, onConnect: () ->
                 when (burn.activitySource) {
                     DailyEnergy.ActivitySource.HEALTH_ACTIVE_CALORIES -> "Daily activity · ${burn.steps?.let { "%,d steps".format(Locale.US, it) } ?: "Samsung Health"}"
                     DailyEnergy.ActivitySource.STEPS -> "Daily activity · ${"%,d".format(Locale.US, burn.steps ?: 0)} steps"
+                    DailyEnergy.ActivitySource.ESTIMATE -> "Daily activity · estimated (no phone data)"
                     DailyEnergy.ActivitySource.NONE -> "Daily activity · not connected"
                 },
                 burn.activity,
             )
             day.workouts.forEach { w -> BurnRow("${w.title} · ${WorkoutFormat.finishedDuration(w.durationSec)}", (w.kcal ?: 0).toDouble()) }
             if (day.workouts.isEmpty()) BurnRow("Workouts", 0.0)
-            val balance = day.eatenKcal - burn.total
+            val balance = DailyEnergy.balance(day.eatenKcal, burn)
             Text(
-                "Balance ${if (balance <= 0) "−" else "+"}${kotlin.math.abs(balance).k()} kcal (${if (balance <= 0) "deficit" else "surplus"} so far)",
-                color = if (balance <= 0) AppSuccess else AppTextSecondary, fontSize = 15.sp,
+                "${if (day.closed) "Final balance" else "Balance so far"} ${signed(balance)} kcal (${if (balance <= 0) "deficit" else "surplus"})",
+                color = if (balance <= 0) AppSuccess else AppTextSecondary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
             )
+            if (day.closed) Text("Locked in when the day ended at 12:00 am.", color = AppTextSecondary, fontSize = 12.sp)
             Text("Steps and active calories during logged workouts are left out, so nothing is counted twice.", color = AppTextSecondary, fontSize = 12.sp)
             if (status != HealthStatus.CONNECTED) {
                 Spacer(Modifier.height(4.dp))
@@ -261,6 +271,62 @@ private fun BurnedCard(day: DayNutrition, status: HealthStatus, onConnect: () ->
                     onClick = onConnect, modifier = Modifier.fillMaxWidth(),
                 )
                 Text("In Samsung Health: Settings → Health Connect → allow Steps and Active calories.", color = AppTextSecondary, fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+private fun signed(v: Double) = (if (v <= 0) "−" else "+") + kotlin.math.abs(v).k()
+
+/**
+ * Last 7 finished days, each locked in at midnight: bars below the line are deficits, above are
+ * surpluses. Green when the day moved you toward your goal. Tap a day to open it.
+ */
+@Composable
+private fun BalanceHistoryCard(history: List<DailyBalanceEntity>, today: LocalDate, selected: LocalDate, goal: NutritionGoal, onDay: (LocalDate) -> Unit) {
+    val days = (7 downTo 1).map { today.minusDays(it.toLong()) }
+    val byDate = history.associateBy { it.date }
+    val shown = days.mapNotNull { byDate[it.toString()] }
+    val maxAbs = shown.maxOfOrNull { kotlin.math.abs(it.balanceKcal) }?.coerceAtLeast(100.0) ?: 100.0
+    fun good(b: Double) = if (goal == NutritionGoal.GAIN) b > 0 else b <= 0
+    Surface(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), shape = RoundedCornerShape(16.dp), color = AppSurface) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Daily balance", color = AppTextPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            Text("Eaten − burned, locked in at 12:00 am. Below the line = deficit.", color = AppTextSecondary, fontSize = 12.sp)
+            Spacer(Modifier.height(10.dp))
+            Row(Modifier.fillMaxWidth()) {
+                days.forEach { d ->
+                    val b = byDate[d.toString()]?.balanceKcal
+                    val color = if (b == null) AppSurfaceHigh else if (good(b)) AppSuccess else AppDanger
+                    Column(
+                        Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
+                            .background(if (d == selected) AppSurfaceHigh else AppSurface)
+                            .clickable { onDay(d) }.padding(vertical = 4.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(b?.let { signed(it) } ?: "—", color = if (b == null) AppTextSecondary else color, fontSize = 11.sp, maxLines = 1)
+                        val half = 34.dp
+                        val frac = ((b?.let { kotlin.math.abs(it) } ?: 0.0) / maxAbs).toFloat().coerceIn(0f, 1f)
+                        Box(Modifier.height(half).width(14.dp), contentAlignment = Alignment.BottomCenter) {
+                            if (b != null && b > 0) Box(Modifier.fillMaxWidth().height(half * frac).clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)).background(color))
+                        }
+                        Box(Modifier.width(22.dp).height(1.dp).background(AppTextSecondary))
+                        Box(Modifier.height(half).width(14.dp), contentAlignment = Alignment.TopCenter) {
+                            if (b != null && b <= 0) Box(Modifier.fillMaxWidth().height(half * frac).clip(RoundedCornerShape(bottomStart = 4.dp, bottomEnd = 4.dp)).background(color))
+                        }
+                        Text(d.format(DateTimeFormatter.ofPattern("EEE", Locale.US)), color = AppTextSecondary, fontSize = 11.sp)
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            if (shown.isEmpty()) {
+                Text("Each day gets its number after midnight once you've logged food that day.", color = AppTextSecondary, fontSize = 13.sp)
+            } else {
+                val total = shown.sumOf { it.balanceKcal }
+                Text(
+                    "Last 7 days: ${signed(total)} kcal · ${signed(total / shown.size)}/day avg over ${shown.size} logged day${if (shown.size == 1) "" else "s"}",
+                    color = AppTextPrimary, fontSize = 14.sp,
+                )
             }
         }
     }
@@ -304,6 +370,9 @@ private fun AddFoodSheet(meal: MealType, viewModel: NutritionViewModel, onDismis
     var packaged by remember { mutableStateOf<PackagedFood?>(null) }
     var manual by remember { mutableStateOf(false) }
     var recent by remember { mutableStateOf<List<FoodEntryEntity>>(emptyList()) }
+    var photo by remember { mutableStateOf<ByteArray?>(null) }
+    var notes by remember { mutableStateOf("") }
+    var editing by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(Unit) { recent = viewModel.recent() }
 
     fun runEstimate(description: String?, image: ByteArray?) {
@@ -317,12 +386,20 @@ private fun AddFoodSheet(meal: MealType, viewModel: NutritionViewModel, onDismis
             busy = false
         }
     }
+    // A new photo waits for optional notes; the AI only runs when "Estimate" is tapped.
     fun fromPhoto(uri: Uri?) {
         if (uri == null) return
-        source = FoodSource.AI_PHOTO
         scope.launch {
             val bytes = viewModel.jpegFrom(uri)
-            if (bytes == null) error = "Couldn't read that photo." else runEstimate(text.ifBlank { null }, bytes)
+            if (bytes == null) {
+                error = "Couldn't read that photo."
+            } else {
+                photo = bytes
+                source = FoodSource.AI_PHOTO
+                estimates.clear()
+                chosen.clear()
+                error = null
+            }
         }
     }
     val photoFile = remember { File(context.cacheDir, "meals").apply { mkdirs() }.let { File(it, "meal.jpg") } }
@@ -339,13 +416,22 @@ private fun AddFoodSheet(meal: MealType, viewModel: NutritionViewModel, onDismis
             item {
                 Text("Add to ${meal.label}", color = AppTextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    text, { text = it }, Modifier.fillMaxWidth(),
-                    placeholder = { Text("e.g. 2 rotis, dal, 150 g chicken breast, Greek yogurt") },
-                    label = { Text("What did you eat?") },
-                )
-                Spacer(Modifier.height(8.dp))
-                PrimaryButton("Estimate with AI", onClick = { source = FoodSource.AI_TEXT; runEstimate(text, null) }, modifier = Modifier.fillMaxWidth(), enabled = text.isNotBlank(), loading = busy)
+                val shot = photo
+                if (shot == null) {
+                    OutlinedTextField(
+                        text, { text = it }, Modifier.fillMaxWidth(),
+                        placeholder = { Text("e.g. 2 rotis, dal, 150 g chicken breast, Greek yogurt") },
+                        label = { Text("What did you eat?") },
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    PrimaryButton("Estimate with AI", onClick = { source = FoodSource.AI_TEXT; runEstimate(text, null) }, modifier = Modifier.fillMaxWidth(), enabled = text.isNotBlank(), loading = busy)
+                } else {
+                    PhotoNotes(
+                        shot, notes, { notes = it }, busy, hasEstimate = estimates.isNotEmpty(),
+                        onEstimate = { source = FoodSource.AI_PHOTO; runEstimate(notes, shot) },
+                        onRemove = { photo = null; notes = ""; estimates.clear(); chosen.clear() },
+                    )
+                }
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SecondaryButton("Photo", onClick = {
@@ -373,12 +459,13 @@ private fun AddFoodSheet(meal: MealType, viewModel: NutritionViewModel, onDismis
                 TextButton(onClick = { manual = true }) { Text("Enter manually", color = AppPrimary) }
                 error?.let { Text(it, color = AppDanger, fontSize = 14.sp) }
                 if (source == FoodSource.AI_PHOTO && busy) Text("Looking at your photo…", color = AppTextSecondary)
+                if (photo == null && estimates.isEmpty()) Text("Tip: snap the photo, then add notes like \"fried in 1 tbsp butter\" or \"ate half\" before estimating.", color = AppTextSecondary, fontSize = 12.sp)
             }
             if (estimates.isNotEmpty()) {
-                item { Text("Estimate (edit if it's off; oil and portion size are the usual misses)", color = AppTextSecondary, fontSize = 13.sp) }
+                item { Text("Estimate. Tap an item to fix grams or calories; oil and portion size are the usual misses.", color = AppTextSecondary, fontSize = 13.sp) }
                 items(estimates.size) { i ->
                     val e = estimates[i]
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.clip(RoundedCornerShape(8.dp)).clickable { editing = i }, verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(chosen.getOrElse(i) { true }, { chosen[i] = it }, colors = CheckboxDefaults.colors(checkedColor = AppPrimary))
                         Column(Modifier.weight(1f)) {
                             Text(e.name, color = AppTextPrimary, fontSize = 15.sp)
@@ -420,6 +507,44 @@ private fun AddFoodSheet(meal: MealType, viewModel: NutritionViewModel, onDismis
         }
     }
     if (manual) ManualDialog(onDismiss = { manual = false }) { viewModel.add(meal, listOf(it), FoodSource.MANUAL); manual = false; onDismiss() }
+    editing?.let { i ->
+        estimates.getOrNull(i)?.let { e ->
+            ManualDialog(initial = e, onDismiss = { editing = null }) { fixed -> estimates[i] = fixed; editing = null }
+        }
+    }
+}
+
+/** The snapped photo with a notes box; nothing is sent to the AI until "Estimate" is tapped. */
+@Composable
+private fun PhotoNotes(
+    bytes: ByteArray,
+    notes: String,
+    onNotes: (String) -> Unit,
+    busy: Boolean,
+    hasEstimate: Boolean,
+    onEstimate: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    val bitmap = remember(bytes) { BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() }
+    Surface(shape = RoundedCornerShape(12.dp), color = AppSurfaceHigh, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (bitmap != null) Image(bitmap, "Meal photo", Modifier.size(88.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Photo ready", color = AppTextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Add anything the photo can't show, then estimate.", color = AppTextSecondary, fontSize = 13.sp)
+                }
+                IconButton(onClick = onRemove) { Icon(Icons.Outlined.Close, "Remove photo", tint = AppTextSecondary) }
+            }
+            OutlinedTextField(
+                notes, onNotes, Modifier.fillMaxWidth(),
+                label = { Text("Notes for the AI (optional)") },
+                placeholder = { Text("e.g. cooked in 1 tbsp butter, 200 g rice, ate half the chicken, protein shake not in photo") },
+            )
+            PrimaryButton(if (hasEstimate) "Re-estimate with these notes" else "Estimate from photo", onClick = onEstimate, modifier = Modifier.fillMaxWidth(), loading = busy)
+        }
+    }
 }
 
 @Composable
@@ -437,28 +562,42 @@ private fun PackagedEditor(food: PackagedFood, onAdd: (FoodEstimate) -> Unit) {
     }
 }
 
+private fun Float.field(): String = if (this % 1f == 0f) roundToInt().toString() else "%.1f".format(Locale.US, this)
+
+/** Manual entry, or (with [initial]) fixing an AI estimate; changing grams rescales the rest. */
 @Composable
-private fun ManualDialog(onDismiss: () -> Unit, onAdd: (FoodEstimate) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var kcal by remember { mutableStateOf("") }
-    var protein by remember { mutableStateOf("") }
-    var carbs by remember { mutableStateOf("") }
-    var fat by remember { mutableStateOf("") }
-    var grams by remember { mutableStateOf("") }
+private fun ManualDialog(initial: FoodEstimate? = null, onDismiss: () -> Unit, onAdd: (FoodEstimate) -> Unit) {
+    var name by remember { mutableStateOf(initial?.name.orEmpty()) }
+    var kcal by remember { mutableStateOf(initial?.kcal?.field().orEmpty()) }
+    var protein by remember { mutableStateOf(initial?.proteinG?.field().orEmpty()) }
+    var carbs by remember { mutableStateOf(initial?.carbsG?.field().orEmpty()) }
+    var fat by remember { mutableStateOf(initial?.fatG?.field().orEmpty()) }
+    var grams by remember { mutableStateOf(initial?.grams?.field().orEmpty()) }
     fun num(s: String) = s.replace(',', '.').toFloatOrNull()
+    fun setGrams(v: String) {
+        grams = v
+        val base = initial?.grams ?: return
+        val g = num(v) ?: return
+        if (base <= 0f) return
+        val f = g / base
+        kcal = (initial.kcal * f).field()
+        protein = (initial.proteinG * f).field()
+        carbs = (initial.carbsG * f).field()
+        fat = (initial.fatG * f).field()
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = AppSurface,
-        title = { Text("Add food") },
+        title = { Text(if (initial == null) "Add food" else "Fix estimate") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true)
                 listOf(
+                    Triple(if (initial?.grams != null) "Grams (rescales the rest)" else "Grams (optional)", grams) { v: String -> setGrams(v) },
                     Triple("Calories (kcal)", kcal) { v: String -> kcal = v },
                     Triple("Protein (g)", protein) { v: String -> protein = v },
                     Triple("Carbs (g)", carbs) { v: String -> carbs = v },
                     Triple("Fat (g)", fat) { v: String -> fat = v },
-                    Triple("Grams (optional)", grams) { v: String -> grams = v },
                 ).forEach { (label, value, set) ->
                     OutlinedTextField(value, set, label = { Text(label) }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                 }
@@ -468,7 +607,7 @@ private fun ManualDialog(onDismiss: () -> Unit, onAdd: (FoodEstimate) -> Unit) {
             TextButton(
                 onClick = { onAdd(FoodEstimate(name.trim(), num(grams), num(kcal) ?: 0f, num(protein) ?: 0f, num(carbs) ?: 0f, num(fat) ?: 0f)) },
                 enabled = name.isNotBlank() && num(kcal) != null,
-            ) { Text("Add", color = AppPrimary) }
+            ) { Text(if (initial == null) "Add" else "Save", color = AppPrimary) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = AppTextSecondary) } },
     )

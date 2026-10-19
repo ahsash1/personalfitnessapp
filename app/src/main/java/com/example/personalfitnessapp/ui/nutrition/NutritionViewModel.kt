@@ -11,6 +11,10 @@ import com.example.personalfitnessapp.ai.AiService
 import com.example.personalfitnessapp.ai.FoodEstimate
 import com.example.personalfitnessapp.data.energy.BodyStats
 import com.example.personalfitnessapp.data.energy.BodyStatsSource
+import com.example.personalfitnessapp.data.energy.DailyBalanceTracker
+import com.example.personalfitnessapp.data.energy.on
+import com.example.personalfitnessapp.data.energy.windows
+import com.example.personalfitnessapp.data.local.entity.DailyBalanceEntity
 import com.example.personalfitnessapp.data.local.dao.FoodDao
 import com.example.personalfitnessapp.data.local.entity.FoodEntryEntity
 import com.example.personalfitnessapp.data.local.entity.FoodSource
@@ -58,6 +62,8 @@ data class DayNutrition(
     val targetProtein: Int?,
     val burn: DailyEnergy.Burn?,
     val workouts: List<WorkoutSummary>,
+    /** True once the day has ended at midnight and its number is locked in. */
+    val closed: Boolean,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -70,6 +76,7 @@ class NutritionViewModel @Inject constructor(
     private val summariesSource: WorkoutSummariesSource,
     private val bodySource: BodyStatsSource,
     private val settings: SettingsRepository,
+    private val tracker: DailyBalanceTracker,
     private val clock: Clock,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
@@ -94,6 +101,10 @@ class NutritionViewModel @Inject constructor(
 
     val healthPermissions: Set<String> get() = health.permissions
 
+    /** Locked-in balances for the last month of finished days. */
+    val history: StateFlow<List<DailyBalanceEntity>> = tracker.observeSince(LocalDate.now(zone).minusDays(DailyBalanceTracker.BACKFILL_DAYS))
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     init { refresh() }
 
     fun shiftDay(days: Long) {
@@ -103,14 +114,16 @@ class NutritionViewModel @Inject constructor(
         refresh()
     }
 
+    fun showDay(d: LocalDate) {
+        if (d.isAfter(LocalDate.now(zone)) || d == _date.value) return
+        _date.value = d
+        refresh()
+    }
+
     private fun bounds(d: LocalDate): Pair<Instant, Instant> =
         d.atStartOfDay(zone).toInstant() to d.plusDays(1).atStartOfDay(zone).toInstant()
 
-    private fun windows(list: List<WorkoutSummary>) =
-        list.map { Instant.ofEpochMilli(it.startedAt) to Instant.ofEpochMilli(it.startedAt + it.durationSec * 1000) }
-
-    fun workoutsOn(d: LocalDate, all: List<WorkoutSummary>) =
-        all.filter { Instant.ofEpochMilli(it.startedAt).atZone(zone).toLocalDate() == d }
+    private fun workoutsOn(d: LocalDate, all: List<WorkoutSummary>) = all.on(d, zone)
 
     fun refresh() = viewModelScope.launch {
         _healthStatus.value = when {
@@ -123,28 +136,50 @@ class NutritionViewModel @Inject constructor(
         val d = _date.value
         val (start, end) = bounds(d)
         val until = minOf(end, Instant.ofEpochMilli(clock.millis()))
-        _health.value = health.activity(start, until, windows(workoutsOn(d, all)))
+        _health.value = health.activity(start, until, workoutsOn(d, all).windows())
 
         val weekStart = bounds(d.minusDays(7)).first
         val week = all.filter { it.startedAt >= weekStart.toEpochMilli() && it.startedAt < start.toEpochMilli() }
-        val weekHealth = health.activity(weekStart, start, windows(week))
+        val weekHealth = health.activity(weekStart, start, week.windows())
         val s = stats.value ?: bodySourceFallback()
         val weekActivity = when {
             weekHealth.activeKcal != null && weekHealth.activeKcal > 0 -> weekHealth.activeKcal / 7
             weekHealth.steps != null && s != null -> EnergyMath.stepsKcal(weekHealth.steps, s.weightKg, s.heightCm, s.sex) / 7
-            // No phone data yet: assume light everyday movement, ~25% of resting energy.
-            s != null -> s.bmr * 0.25
+            // No phone data yet: assume a sedentary day's movement.
+            s != null -> s.bmr * DailyEnergy.SEDENTARY_ACTIVITY_FRACTION
             else -> null
         }
         _weekAverage.value = weekActivity?.let { it to week.sumOf { w -> (w.kcal ?: 0).toDouble() } / 7 }
+        tracker.closeFinishedDays()
     }
 
     private suspend fun bodySourceFallback(): BodyStats? = bodySource.stats.first()
 
-    fun day(entries: List<FoodEntryEntity>, all: List<WorkoutSummary>, s: BodyStats?, p: NutritionPrefs, h: HealthActivity?, avg: Pair<Double, Double>?): DayNutrition {
+    fun day(
+        entries: List<FoodEntryEntity>,
+        all: List<WorkoutSummary>,
+        s: BodyStats?,
+        p: NutritionPrefs,
+        h: HealthActivity?,
+        avg: Pair<Double, Double>?,
+        history: List<DailyBalanceEntity>,
+    ): DayNutrition {
         val eaten = entries.sumOf { it.kcal.toDouble() }
-        val workouts = workoutsOn(_date.value, all)
-        val burn = s?.let {
+        val d = _date.value
+        val workouts = workoutsOn(d, all)
+        val closed = d.isBefore(LocalDate.now(zone))
+        // A finished day shows the number locked in at midnight, so the card matches the history chart.
+        val locked = history.firstOrNull { it.date == d.toString() }?.takeIf { closed }
+        val burn = locked?.let {
+            DailyEnergy.Burn(
+                resting = it.restingKcal,
+                digestion = it.digestionKcal,
+                activity = it.activityKcal,
+                activitySource = runCatching { DailyEnergy.ActivitySource.valueOf(it.activitySource) }.getOrDefault(DailyEnergy.ActivitySource.ESTIMATE),
+                steps = it.steps,
+                workouts = it.workoutKcal,
+            )
+        } ?: s?.let {
             DailyEnergy.burn(
                 bmr = it.bmr,
                 eatenKcal = eaten,
@@ -165,6 +200,7 @@ class NutritionViewModel @Inject constructor(
             targetProtein = protein,
             burn = burn,
             workouts = workouts,
+            closed = closed,
         )
     }
 
@@ -172,15 +208,20 @@ class NutritionViewModel @Inject constructor(
 
     fun add(meal: MealType, items: List<FoodEstimate>, source: FoodSource, barcode: String? = null) = viewModelScope.launch {
         val now = clock.millis()
+        val d = _date.value
         foodDao.insert(items.map {
             FoodEntryEntity(
-                date = _date.value.toString(), meal = meal, name = it.name, grams = it.grams, kcal = it.kcal,
+                date = d.toString(), meal = meal, name = it.name, grams = it.grams, kcal = it.kcal,
                 proteinG = it.proteinG, carbsG = it.carbsG, fatG = it.fatG, source = source, barcode = barcode, createdAt = now,
             )
         })
+        tracker.reclose(d)
     }
 
-    fun delete(id: Long) = viewModelScope.launch { foodDao.delete(id) }
+    fun delete(id: Long) = viewModelScope.launch {
+        foodDao.delete(id)
+        tracker.reclose(_date.value)
+    }
 
     suspend fun recent(): List<FoodEntryEntity> = foodDao.recent(30)
 

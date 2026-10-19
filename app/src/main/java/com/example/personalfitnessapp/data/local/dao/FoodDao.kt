@@ -14,6 +14,10 @@ interface FoodDao {
     @Query("SELECT * FROM food_entries WHERE date BETWEEN :from AND :to ORDER BY date, createdAt")
     suspend fun between(from: String, to: String): List<FoodEntryEntity>
 
+    /** Days in [from, to) with at least one food logged. */
+    @Query("SELECT DISTINCT date FROM food_entries WHERE date >= :from AND date < :to ORDER BY date")
+    suspend fun loggedDates(from: String, to: String): List<String>
+
     @Insert
     suspend fun insert(entries: List<FoodEntryEntity>)
 

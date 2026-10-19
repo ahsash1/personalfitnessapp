@@ -190,8 +190,15 @@ class ResilientAiService @Inject constructor(
             append("Use standard food-composition values (USDA-style); any cuisine. When the portion isn't stated, ")
             append("assume a typical single serving. For home-cooked dishes include typical cooking oil or ghee. ")
             append("If the user gives quantities (\"2 rotis\", \"150 g chicken\", \"1 scoop whey\") use them exactly.")
-            if (description != null) append("\n\nMeal: ").append(description)
-            if (imageBytes != null) append("\n\nEstimate from the photo; judge portion size from plate and cutlery.")
+            if (imageBytes != null) {
+                append("\n\nEstimate from the photo; judge portion size from plate and cutlery.")
+                if (description != null) {
+                    append("\n\nThe user's notes about this photo. They override what the photo seems to show ")
+                    append("(amounts, hidden ingredients, oil or butter used, what was left uneaten): ").append(description)
+                }
+            } else if (description != null) {
+                append("\n\nMeal: ").append(description)
+            }
         }
         return structured(prompt, schema, imageBytes) { obj ->
             (obj["items"] as kotlinx.serialization.json.JsonArray).map { el ->

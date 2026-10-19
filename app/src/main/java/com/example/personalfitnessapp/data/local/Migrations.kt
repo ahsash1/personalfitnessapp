@@ -70,5 +70,17 @@ object Migrations {
         }
     }
 
-    val ALL: Array<Migration> = arrayOf(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+    /** Each finished day's calorie balance. Additive only. */
+    private val MIGRATION_6_7 = object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `daily_balance` (`date` TEXT NOT NULL, `eatenKcal` REAL NOT NULL, " +
+                    "`restingKcal` REAL NOT NULL, `digestionKcal` REAL NOT NULL, `activityKcal` REAL NOT NULL, " +
+                    "`activitySource` TEXT NOT NULL, `steps` INTEGER, `workoutKcal` REAL NOT NULL, `closedAt` INTEGER NOT NULL, " +
+                    "PRIMARY KEY(`date`))"
+            )
+        }
+    }
+
+    val ALL: Array<Migration> = arrayOf(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
 }

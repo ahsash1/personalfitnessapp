@@ -81,5 +81,8 @@ object DatabaseModule {
     fun provideFoodDao(db: AppDatabase): com.example.personalfitnessapp.data.local.dao.FoodDao = db.foodDao()
 
     @Provides
+    fun provideDailyBalanceDao(db: AppDatabase): com.example.personalfitnessapp.data.local.dao.DailyBalanceDao = db.dailyBalanceDao()
+
+    @Provides
     fun provideWorkoutLogDao(db: AppDatabase): WorkoutLogDao = db.workoutLogDao()
 }
