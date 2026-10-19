@@ -50,6 +50,7 @@ data class ExerciseInfo(
     val imageUrl: String?,
     val type: ExerciseType,
     val muscle: String,
+    val equipment: String,
     val primary: List<Muscle>,
     val secondary: List<Muscle>,
     val pinnedNote: String?,
@@ -87,6 +88,7 @@ fun ExerciseEntity.toInfo() = ExerciseInfo(
     imageUrl = imageRefs.firstOrNull(),
     type = ExerciseTypes.of(this),
     muscle = primaryMuscles.firstOrNull()?.displayName.orEmpty(),
+    equipment = equipment,
     primary = primaryMuscles,
     secondary = secondaryMuscles,
     pinnedNote = pinnedNote,
@@ -122,6 +124,10 @@ class WorkoutEditorViewModel @Inject constructor(
     /** Set keys that couldn't be completed (nothing entered, nothing to copy): the row shakes. */
     private val _shake = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val shake: SharedFlow<String> = _shake.asSharedFlow()
+
+    /** Smart superset scrolling: the exercise key to scroll to next. */
+    private val _scrollTo = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val scrollTo: SharedFlow<String> = _scrollTo.asSharedFlow()
 
     /** Exercise slot waiting for the picker's result in "Replace Exercise". */
     var pendingReplaceKey: String? = null
@@ -167,7 +173,7 @@ class WorkoutEditorViewModel @Inject constructor(
         val routineId = s.routineId.takeIf { prefs.value.previousValuesMode == PreviousValuesMode.SAME_ROUTINE }
         val infos = missing.associateWith { id ->
             exercises.getById(id)?.toInfo()
-                ?: ExerciseInfo(id, "Unknown exercise", null, ExerciseType.WEIGHT_REPS, "", emptyList(), emptyList(), null)
+                ?: ExerciseInfo(id, "Unknown exercise", null, ExerciseType.WEIGHT_REPS, "", "Other", emptyList(), emptyList(), null)
         }
         val history = missing.associateWith { id ->
             ExerciseHistory(log.previousSets(id, s.sessionId, routineId), log.historyBests(id, s.sessionId))
@@ -218,6 +224,28 @@ class WorkoutEditorViewModel @Inject constructor(
     fun setReps(key: String, setKey: String, v: String) = edit { DraftOps.updateSet(it, key, setKey) { s -> s.copy(reps = v) } }
     fun setDistance(key: String, setKey: String, v: String) = edit { DraftOps.updateSet(it, key, setKey) { s -> s.copy(distance = v) } }
     fun setDuration(key: String, setKey: String, sec: Int?) = edit { DraftOps.updateSet(it, key, setKey) { s -> s.copy(durationSec = sec) } }
+    fun setRpe(key: String, setKey: String, rpe: Double?) = edit { DraftOps.updateSet(it, key, setKey) { s -> s.copy(rpe = rpe) } }
+
+    /** The weight warm-ups ramp toward: the first working set's entered or placeholder weight. */
+    fun workingWeight(key: String): Double? {
+        val s = _state.value
+        val ex = s.draft.exercises.firstOrNull { it.key == key } ?: return null
+        val previous = s.history[ex.exerciseId]?.previous.orEmpty()
+        return ex.sets.indices.firstNotNullOfOrNull { i ->
+            ex.sets[i].takeIf { it.type != SetType.WARMUP }?.let { WorkoutMath.resolve(it, WorkoutMath.placeholder(ex.sets, i, previous)).weightKg }
+        }?.takeIf { it > 0 }
+    }
+
+    /** Returns false when there's no working weight to ramp toward yet. */
+    fun addWarmups(key: String): Boolean {
+        val ex = _state.value.draft.exercises.firstOrNull { it.key == key } ?: return false
+        val working = workingWeight(key) ?: return false
+        val equipment = _state.value.infos[ex.exerciseId]?.equipment
+        val step = if (equipment == "Dumbbell" || equipment == "Kettlebell") 1.0 else 2.5
+        val min = if (equipment == "Barbell") prefs.value.barWeightKg else 0.0
+        edit { DraftOps.addWarmups(it, key, com.example.personalfitnessapp.domain.workout.PlateMath.warmups(working, step, min)) }
+        return true
+    }
 
     /** Saving a rest time also makes it this exercise's default next time (spec §13). */
     fun setRest(key: String, seconds: Int) {
@@ -254,6 +282,11 @@ class WorkoutEditorViewModel @Inject constructor(
                 .flatMap { it.sets }.filter { it.completed && it.key != setKey }
             val prs = WorkoutMath.prsFor(ex.exerciseId, done, earlier, history.bests, type)
             if (prs.isNotEmpty()) _prQueue.update { it + prs }
+        }
+        if (prefs.value.smartSupersetScrolling && ex.supersetGroup != null) {
+            val group = s.draft.exercises.filter { it.supersetGroup == ex.supersetGroup }
+            val next = group[(group.indexOfFirst { it.key == key } + 1) % group.size]
+            if (next.key != key) _scrollTo.tryEmit(next.key)
         }
         val rest = ex.restSeconds ?: 0
         if (rest > 0) {

@@ -94,6 +94,12 @@ object DraftOps {
     }
 
     /** Finishing keeps completed sets only (incomplete ones are discarded after confirmation). */
+    /** Prepends warm-up sets unless the exercise already starts with one. */
+    fun addWarmups(draft: WorkoutDraft, exerciseKey: String, warmups: List<DraftSet>) = mapExercise(draft, exerciseKey) {
+        if (warmups.isEmpty() || it.sets.firstOrNull()?.type == com.example.personalfitnessapp.data.local.entity.SetType.WARMUP) it
+        else it.copy(sets = warmups + it.sets)
+    }
+
     fun withoutIncompleteSets(draft: WorkoutDraft): WorkoutDraft = draft.copy(
         exercises = draft.exercises
             .map { ex -> ex.copy(sets = ex.sets.filter { it.completed }) }

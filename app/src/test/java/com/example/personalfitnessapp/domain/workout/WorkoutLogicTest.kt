@@ -90,3 +90,26 @@ class WorkoutLogicTest {
         assertNull(draft.exercises.single().supersetGroup)
     }
 }
+
+class PlateMathTest {
+    @Test
+    fun `plates per side for 100 kg on a 20 kg bar`() {
+        val loading = PlateMath.plates(100.0, 20.0)
+        assertEquals(listOf(25.0, 15.0), loading.perSide)
+        assertEquals(0.0, loading.remainderKg, 1e-9)
+    }
+
+    @Test
+    fun `weights that can't be made report a remainder`() {
+        assertEquals(0.5, PlateMath.plates(23.0, 20.0).remainderKg, 1e-9)
+        assertTrue(PlateMath.plates(15.0, 20.0).perSide.isEmpty())
+    }
+
+    @Test
+    fun `warm-ups ramp to the working weight on the load step`() {
+        val sets = PlateMath.warmups(100.0, 2.5, minKg = 20.0)
+        assertEquals(listOf("50", "70", "85"), sets.map { it.weight })
+        assertTrue(sets.all { it.type == SetType.WARMUP })
+        assertEquals(listOf("20", "25"), PlateMath.warmups(30.0, 2.5, minKg = 20.0).map { it.weight })
+    }
+}

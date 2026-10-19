@@ -397,6 +397,8 @@ private sealed interface EditorSheet {
     data class SetTypeFor(val key: String, val setKey: String) : EditorSheet
     data object Reorder : EditorSheet
     data class Superset(val key: String) : EditorSheet
+    data class Rpe(val key: String, val setKey: String) : EditorSheet
+    data class Plates(val key: String) : EditorSheet
 }
 
 /** The exercise cards with their sheets, shared by the live workout and Edit Workout. */
@@ -444,16 +446,29 @@ private fun EditorList(
             }
             override fun onDeleteSet(key: String, setKey: String) = viewModel.removeSet(key, setKey)
             override fun onAddSet(key: String) = viewModel.addSet(key)
+            override fun onRpe(key: String, setKey: String) { sheet = EditorSheet.Rpe(key, setKey) }
+            override fun onPlates(key: String) { sheet = EditorSheet.Plates(key) }
         }
     }
 
-    LazyColumn(modifier.fillMaxSize().imePadding()) {
+    val prefs by viewModel.prefs.collectAsState()
+    val options = CardOptions(rpe = prefs.rpeTracking, plates = prefs.plateCalculator, inlineTimer = prefs.inlineTimer)
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(Unit) {
+        viewModel.scrollTo.collect { key ->
+            val index = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == key }?.index
+                ?: (state.draft.exercises.indexOfFirst { it.key == key } + 1)
+            listState.animateScrollToItem(index.coerceAtLeast(0))
+        }
+    }
+    LazyColumn(modifier.fillMaxSize().imePadding(), state = listState) {
         header()
         items(state.draft.exercises, key = { it.key }) { ex ->
             val history = state.history[ex.exerciseId] ?: ExerciseHistory()
             val info = state.infos[ex.exerciseId]
             val medals = if (showMedals && info != null) WorkoutMath.medalSetKeys(ex, history.bests, info.type) else emptySet()
-            ExerciseCard(ex, info, history, medals, shakes, actions)
+            ExerciseCard(ex, info, history, medals, shakes, actions, options)
         }
         item {
             Column(Modifier.padding(vertical = 16.dp).navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -469,6 +484,15 @@ private fun EditorList(
         is EditorSheet.Menu -> ExerciseMenuSheet(
             inSuperset = state.draft.exercises.firstOrNull { it.key == s.key }?.supersetGroup != null,
             onDismiss = { sheet = null },
+            onWarmups = state.draft.exercises.firstOrNull { it.key == s.key }
+                ?.takeIf { state.infos[it.exerciseId]?.type == com.example.personalfitnessapp.data.local.entity.ExerciseType.WEIGHT_REPS }
+                ?.let {
+                    {
+                        if (!viewModel.addWarmups(s.key)) {
+                            android.widget.Toast.makeText(context, "Enter the working weight first", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                },
             onReorder = { sheet = EditorSheet.Reorder },
             onReplace = { viewModel.pendingReplaceKey = s.key; onReplaceExercise() },
             onSuperset = { sheet = EditorSheet.Superset(s.key) },
@@ -496,6 +520,12 @@ private fun EditorList(
             onDismiss = { sheet = null },
             onPick = { viewModel.addToSuperset(s.key, it) },
         )
+        is EditorSheet.Rpe -> RpeSheet(
+            current = state.draft.exercises.firstOrNull { it.key == s.key }?.sets?.firstOrNull { it.key == s.setKey }?.rpe,
+            onDismiss = { sheet = null },
+            onPick = { viewModel.setRpe(s.key, s.setKey, it) },
+        )
+        is EditorSheet.Plates -> PlateSheet(viewModel.workingWeight(s.key), prefs.barWeightKg) { sheet = null }
         null -> Unit
     }
 }

@@ -55,6 +55,7 @@ import com.example.personalfitnessapp.ui.workout.SaveWorkoutScreen
 import com.example.personalfitnessapp.ui.workout.WorkoutDetailScreen
 import com.example.personalfitnessapp.ui.workout.WorkoutPill
 import com.example.personalfitnessapp.ui.workout.WorkoutPillViewModel
+import com.example.personalfitnessapp.ui.workout.WorkoutSettingsScreen
 import com.example.personalfitnessapp.ui.workout.WorkoutTabScreen
 
 /**
@@ -77,6 +78,7 @@ object Routes {
     const val CELEBRATION = "celebration/{sessionId}"
     const val EXERCISE_PICKER = "exercise_picker"
     const val CALENDAR = "calendar"
+    const val WORKOUT_SETTINGS = "workout_settings"
     const val STATISTICS = "statistics"
     const val BODY_METRICS = "body_metrics"
     const val COACH = "coach"
@@ -249,7 +251,11 @@ fun AppNavHost(
                 SettingsScreen(
                     onBackClick = { navController.popBackStack() },
                     onAiConnectionClick = { navController.navigate(Routes.AI_CONNECTION) },
+                    onWorkoutSettingsClick = { navController.navigate(Routes.WORKOUT_SETTINGS) },
                 )
+            }
+            composable(Routes.WORKOUT_SETTINGS) {
+                WorkoutSettingsScreen(onBack = { navController.popBackStack() })
             }
             composable(Routes.AI_CONNECTION) {
                 AiConnectionScreen(onBackClick = { navController.popBackStack() })
@@ -263,7 +269,7 @@ fun AppNavHost(
                     onAddExercise = { navController.navigate(Routes.addExercise(single = false)) },
                     onReplaceExercise = { navController.navigate(Routes.addExercise(single = true)) },
                     onExerciseClick = { id -> navController.navigate(Routes.exerciseDetail(id)) },
-                    onSettings = { navController.navigate(Routes.SETTINGS) },
+                    onSettings = { navController.navigate(Routes.WORKOUT_SETTINGS) },
                     onCoach = { navController.navigate(Routes.COACH) },
                     onDiscarded = { navController.popBackStack() },
                 )

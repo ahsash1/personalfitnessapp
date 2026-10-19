@@ -41,6 +41,7 @@ import com.example.personalfitnessapp.ui.profile.ProfileFormFields
 fun SettingsScreen(
     onBackClick: () -> Unit,
     onAiConnectionClick: () -> Unit = {},
+    onWorkoutSettingsClick: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -89,6 +90,10 @@ fun SettingsScreen(
                     checked = uiState.keepScreenOnDuringSession,
                     onCheckedChange = viewModel::onKeepScreenOnChange,
                 )
+            }
+
+            OutlinedButton(onClick = onWorkoutSettingsClick, modifier = Modifier.fillMaxWidth()) {
+                Text("Workout settings: rest timer, plates, RPE, PR alerts")
             }
 
             OutlinedButton(onClick = onAiConnectionClick, modifier = Modifier.fillMaxWidth()) {

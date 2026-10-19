@@ -19,6 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -37,6 +38,7 @@ import kotlinx.coroutines.launch
 class RestTimerService : Service() {
     @Inject lateinit var restTimerRepository: RestTimerRepository
     @Inject lateinit var clock: Clock
+    @Inject lateinit var settings: com.example.personalfitnessapp.data.settings.SettingsRepository
 
     private val serviceScope = CoroutineScope(Dispatchers.Default + Job())
 
@@ -85,9 +87,11 @@ class RestTimerService : Service() {
         NotificationManagerCompat.from(this).notify(RestTimerNotifications.NOTIFICATION_ID, notification)
     }
 
-    private fun onRestComplete(exerciseName: String) {
+    private suspend fun onRestComplete(exerciseName: String) {
         vibrate()
-        val notification = RestTimerNotifications.restCompleteNotification(this, exerciseName)
+        // Workout Settings > Rest Timer Sound: "Vibrate only" posts the alert silently.
+        val sound = runCatching { settings.workoutPrefs.first().restTimerSound }.getOrDefault(true)
+        val notification = RestTimerNotifications.restCompleteNotification(this, exerciseName, silent = !sound)
         NotificationManagerCompat.from(this).notify(RestTimerNotifications.NOTIFICATION_ID, notification)
         stopSelf()
     }

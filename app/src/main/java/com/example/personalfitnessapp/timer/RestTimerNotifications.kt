@@ -43,12 +43,15 @@ object RestTimerNotifications {
             .setContentText(formatSeconds(remainingSeconds) + " remaining")
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            // The channel is high-importance for the completion alert; the countdown itself stays quiet.
+            .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setContentIntent(contentIntent(context))
             .build()
 
-    fun restCompleteNotification(context: Context, exerciseName: String) =
+    fun restCompleteNotification(context: Context, exerciseName: String, silent: Boolean = false) =
         NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSilent(silent)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle("Rest complete")
             .setContentText("Back to it - $exerciseName")

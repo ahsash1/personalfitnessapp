@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -33,6 +35,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.StickyNote2
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Autorenew
+import androidx.compose.material.icons.outlined.Calculate
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Stop
+import androidx.compose.material.icons.outlined.Whatshot
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.EmojiEvents
@@ -88,6 +94,7 @@ import com.example.personalfitnessapp.domain.WorkoutFormat
 import com.example.personalfitnessapp.domain.workout.DraftExercise
 import com.example.personalfitnessapp.domain.workout.DraftSet
 import com.example.personalfitnessapp.domain.workout.ExerciseTypes
+import com.example.personalfitnessapp.domain.workout.PlateMath
 import com.example.personalfitnessapp.domain.workout.PrEvent
 import com.example.personalfitnessapp.domain.workout.PreviousSet
 import com.example.personalfitnessapp.domain.workout.ResolvedSet
@@ -148,7 +155,12 @@ interface CardActions {
     fun onToggle(key: String, setKey: String)
     fun onDeleteSet(key: String, setKey: String)
     fun onAddSet(key: String)
+    fun onRpe(key: String, setKey: String)
+    fun onPlates(key: String)
 }
+
+/** Which optional columns/buttons Workout Settings turned on. */
+data class CardOptions(val rpe: Boolean = false, val plates: Boolean = false, val inlineTimer: Boolean = true)
 
 @Composable
 fun ExerciseCard(
@@ -158,8 +170,11 @@ fun ExerciseCard(
     medals: Set<String>,
     shakes: Map<String, Int>,
     actions: CardActions,
+    options: CardOptions = CardOptions(),
 ) {
     val type = info?.type ?: ExerciseType.WEIGHT_REPS
+    val showRpe = options.rpe && type == ExerciseType.WEIGHT_REPS
+    val showPlates = options.plates && type == ExerciseType.WEIGHT_REPS && info?.equipment == "Barbell"
     val rail = supersetColor(exercise.supersetGroup)
     Column(
         Modifier.fillMaxWidth().padding(top = 16.dp).drawBehind {
@@ -194,7 +209,7 @@ fun ExerciseCard(
             if (!exercise.noteOpen) Chip(Icons.AutoMirrored.Outlined.StickyNote2, "Note") { actions.onNoteChip(exercise.key) }
         }
         if (exercise.noteOpen) NoteLine(exercise.note.orEmpty()) { text, close -> actions.onNote(exercise.key, text, close) }
-        TableHeader(type)
+        TableHeader(type, showRpe, if (showPlates) ({ actions.onPlates(exercise.key) }) else null)
         val labels = WorkoutMath.setLabels(exercise.sets)
         exercise.sets.forEachIndexed { index, set ->
             val placeholder = WorkoutMath.placeholder(exercise.sets, index, history.previous)
@@ -214,6 +229,9 @@ fun ExerciseCard(
                     onDuration = { actions.onDuration(exercise.key, set.key, it) },
                     onToggle = { actions.onToggle(exercise.key, set.key) },
                     onDelete = { actions.onDeleteSet(exercise.key, set.key) },
+                    showRpe = showRpe,
+                    onRpe = { actions.onRpe(exercise.key, set.key) },
+                    inlineTimer = options.inlineTimer,
                 )
             }
         }
@@ -264,16 +282,27 @@ private fun NoteLine(note: String, onChange: (String, Boolean) -> Unit) {
 
 private val SetColWidth = 44.dp
 private val CheckColWidth = 48.dp
+private val RpeColWidth = 40.dp
 
 @Composable
-private fun TableHeader(type: ExerciseType) {
+private fun TableHeader(type: ExerciseType, showRpe: Boolean, onPlates: (() -> Unit)?) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         HeaderText("SET", Modifier.width(SetColWidth))
         HeaderText("PREVIOUS", Modifier.weight(1.4f))
-        if (ExerciseTypes.usesWeight(type)) HeaderText(if (type == ExerciseType.ASSISTED_BODYWEIGHT) "-KG" else "KG", Modifier.weight(1f))
+        if (ExerciseTypes.usesWeight(type)) {
+            if (onPlates != null) {
+                Row(Modifier.weight(1f).clickable(onClick = onPlates), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.Calculate, "Plate calculator", tint = AppPrimary, modifier = Modifier.size(14.dp))
+                    Text(" KG", color = AppPrimary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                }
+            } else {
+                HeaderText(if (type == ExerciseType.ASSISTED_BODYWEIGHT) "-KG" else "KG", Modifier.weight(1f))
+            }
+        }
         if (ExerciseTypes.usesDistance(type)) HeaderText("KM", Modifier.weight(1f))
         if (ExerciseTypes.usesReps(type)) HeaderText("REPS", Modifier.weight(1f))
         if (ExerciseTypes.usesDuration(type)) HeaderText("TIME", Modifier.weight(1f))
+        if (showRpe) HeaderText("RPE", Modifier.width(RpeColWidth))
         Box(Modifier.width(CheckColWidth), contentAlignment = Alignment.Center) {
             Icon(Icons.Outlined.Check, null, tint = AppTextSecondary, modifier = Modifier.size(16.dp))
         }
@@ -302,6 +331,9 @@ private fun SetRow(
     onDuration: (Int?) -> Unit,
     onToggle: () -> Unit,
     onDelete: () -> Unit,
+    showRpe: Boolean = false,
+    onRpe: () -> Unit = {},
+    inlineTimer: Boolean = false,
 ) {
     val offset = remember { Animatable(0f) }
     LaunchedEffect(shake) {
@@ -345,7 +377,12 @@ private fun SetRow(
                 NumberCell(set.reps, placeholder?.reps?.toString().orEmpty(), set.completed, decimal = false, onReps, Modifier.weight(1f))
             }
             if (ExerciseTypes.usesDuration(type)) {
-                DurationCell(set.durationSec, placeholder?.durationSec, set.completed, onDuration, Modifier.weight(1f))
+                DurationCell(set.durationSec, placeholder?.durationSec, set.completed, onDuration, Modifier.weight(1f), inlineTimer)
+            }
+            if (showRpe) {
+                Box(Modifier.width(RpeColWidth).height(34.dp).clickable(onClick = onRpe), contentAlignment = Alignment.Center) {
+                    Text(set.rpe?.let(PlateMath::rpeLabel) ?: "-", color = if (set.rpe != null) AppTextPrimary else AppTextSecondary, fontSize = 15.sp)
+                }
             }
             Box(Modifier.width(CheckColWidth), contentAlignment = Alignment.Center) {
                 Box(
@@ -413,7 +450,37 @@ private fun sanitizeDecimal(text: String): String {
 
 /** Digits fill in from the right like a microwave: "5", "50", "500" -> 05:00. */
 @Composable
-private fun DurationCell(seconds: Int?, placeholder: Int?, completed: Boolean, onChange: (Int?) -> Unit, modifier: Modifier) {
+private fun DurationCell(seconds: Int?, placeholder: Int?, completed: Boolean, onChange: (Int?) -> Unit, modifier: Modifier, inlineTimer: Boolean = false) {
+    // Inline timer (Workout Settings): play counts up on screen, stop writes the time into the set.
+    var timerStart by remember { mutableStateOf<Long?>(null) }
+    val start = timerStart
+    if (inlineTimer && !completed && (seconds == null || start != null)) {
+        val elapsed by androidx.compose.runtime.produceState(0L, start) {
+            while (start != null) {
+                value = (System.currentTimeMillis() - start) / 1000
+                kotlinx.coroutines.delay(250)
+            }
+        }
+        Box(modifier, contentAlignment = Alignment.Center) {
+            CellBox(focused = start != null, completed = false) {
+                Row(
+                    Modifier.fillMaxSize().clickable {
+                        if (start == null) timerStart = System.currentTimeMillis()
+                        else {
+                            onChange(((System.currentTimeMillis() - start) / 1000).toInt().coerceAtLeast(1))
+                            timerStart = null
+                        }
+                    },
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(if (start == null) Icons.Outlined.PlayArrow else Icons.Outlined.Stop, if (start == null) "Start timer" else "Stop timer", tint = AppPrimary, modifier = Modifier.size(18.dp))
+                    if (start != null) Text(" " + WorkoutFormat.clock(elapsed), color = AppTextPrimary, fontSize = 15.sp)
+                }
+            }
+        }
+        return
+    }
     var raw by remember { mutableStateOf(seconds?.let(::secondsToDigits).orEmpty()) }
     var focused by remember { mutableStateOf(false) }
     LaunchedEffect(seconds) { if (digitsToSeconds(raw) != (seconds ?: 0)) raw = seconds?.let(::secondsToDigits).orEmpty() }
@@ -522,6 +589,7 @@ fun PrToast(event: PrEvent?, info: ExerciseInfo?, onShown: () -> Unit) {
 fun ExerciseMenuSheet(
     inSuperset: Boolean,
     onDismiss: () -> Unit,
+    onWarmups: (() -> Unit)? = null,
     onReorder: () -> Unit,
     onReplace: () -> Unit,
     onSuperset: () -> Unit,
@@ -530,6 +598,7 @@ fun ExerciseMenuSheet(
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = AppSurface, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         SheetGroup {
+            if (onWarmups != null) SheetRow("Add Warm-up Sets", { onDismiss(); onWarmups() }, leading = { SheetIcon(Icons.Outlined.Whatshot) })
             SheetRow("Reorder Exercises", { onDismiss(); onReorder() }, leading = { SheetIcon(Icons.Outlined.SwapVert) })
             SheetRow("Replace Exercise", { onDismiss(); onReplace() }, leading = { SheetIcon(Icons.Outlined.Autorenew) })
             if (inSuperset) SheetRow("Remove From Superset", { onDismiss(); onRemoveSuperset() }, leading = { SheetIcon(Icons.Outlined.LinkOff) })
@@ -686,4 +755,79 @@ fun ConfirmDialog(message: String, confirmText: String, onConfirm: () -> Unit, o
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RpeSheet(current: Double?, onDismiss: () -> Unit, onPick: (Double?) -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = AppSurface) {
+        Text("Rate of Perceived Exertion", Modifier.fillMaxWidth().padding(bottom = 12.dp), color = AppTextPrimary, fontSize = 18.sp, textAlign = TextAlign.Center)
+        androidx.compose.foundation.lazy.LazyColumn(Modifier.heightIn(max = 520.dp)) {
+            item {
+                SheetGroup {
+                    PlateMath.RPE.forEach { (value, meaning) ->
+                        SheetRow(
+                            meaning,
+                            { onPick(value); onDismiss() },
+                            leading = { Text(PlateMath.rpeLabel(value), color = if (value == current) AppPrimary else AppTextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+                        )
+                    }
+                    SheetRow("Clear", { onPick(null); onDismiss() }, textColor = AppTextSecondary, showDivider = false)
+                }
+                Spacer(Modifier.height(32.dp))
+            }
+        }
+    }
+}
+
+/** Plates per side for a barbell weight (Workout Settings > Plate Calculator). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PlateSheet(initialKg: Double?, barKg: Double, onDismiss: () -> Unit) {
+    var text by remember { mutableStateOf(initialKg?.let(WorkoutFormat::weight).orEmpty()) }
+    val target = text.replace(',', '.').toDoubleOrNull()
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = AppSurface) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("Plate Calculator", color = AppTextPrimary, fontSize = 18.sp)
+            Spacer(Modifier.height(12.dp))
+            androidx.compose.material3.OutlinedTextField(
+                text, { text = sanitizeDecimal(it) }, singleLine = true, label = { Text("Total weight (kg)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            )
+            Spacer(Modifier.height(8.dp))
+            Text("Bar ${WorkoutFormat.weight(barKg)} kg (change it in Workout Settings)", color = AppTextSecondary, fontSize = 13.sp)
+            Spacer(Modifier.height(16.dp))
+            if (target != null) {
+                val loading = PlateMath.plates(target, barKg)
+                if (target < barKg) {
+                    Text("Less than the bar alone.", color = AppTextSecondary)
+                } else {
+                    Text("Each side", color = AppTextSecondary, fontSize = 14.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (loading.perSide.isEmpty()) Text("Empty bar", color = AppTextPrimary)
+                        loading.perSide.forEach { p ->
+                            Box(
+                                Modifier.width(36.dp).height((40 + p * 3).dp).clip(RoundedCornerShape(6.dp)).background(plateColor(p)),
+                                contentAlignment = Alignment.Center,
+                            ) { Text(WorkoutFormat.weight(p), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                        }
+                    }
+                    if (loading.remainderKg > 0) {
+                        Spacer(Modifier.height(8.dp))
+                        Text("${WorkoutFormat.weight(loading.remainderKg)} kg can't be made with standard plates", color = AppDanger, fontSize = 13.sp)
+                    }
+                }
+            }
+            Spacer(Modifier.height(40.dp))
+        }
+    }
+}
+
+private fun plateColor(kg: Double): Color = when {
+    kg >= 25 -> Color(0xFFD32F2F)
+    kg >= 20 -> Color(0xFF1976D2)
+    kg >= 15 -> Color(0xFFF9A825)
+    kg >= 10 -> Color(0xFF388E3C)
+    else -> Color(0xFF616161)
 }
