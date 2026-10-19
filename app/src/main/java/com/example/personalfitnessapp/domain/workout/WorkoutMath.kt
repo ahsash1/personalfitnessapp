@@ -12,6 +12,8 @@ data class ResolvedSet(
     val reps: Int?,
     val distanceKm: Double?,
     val durationSec: Int?,
+    val inclinePct: Double? = null,
+    val resistanceLevel: Int? = null,
 )
 
 enum class PrKind(val title: String, val historyLabel: String) {
@@ -76,7 +78,7 @@ object WorkoutMath {
      * (what "+ Add Set" copies), else nothing.
      */
     fun placeholder(sets: List<DraftSet>, index: Int, previous: List<PreviousSet>): ResolvedSet? {
-        previous.getOrNull(index)?.let { return ResolvedSet(it.weightKg, it.reps, it.distanceKm, it.durationSec) }
+        previous.getOrNull(index)?.let { return ResolvedSet(it.weightKg, it.reps, it.distanceKm, it.durationSec, it.inclinePct, it.resistanceLevel) }
         if (index <= 0) return null
         return resolve(sets[index - 1], placeholder(sets, index - 1, previous))
     }
@@ -86,6 +88,8 @@ object WorkoutMath {
         reps = parseInt(set.reps) ?: placeholder?.reps,
         distanceKm = parseDecimal(set.distance) ?: placeholder?.distanceKm,
         durationSec = set.durationSec ?: placeholder?.durationSec,
+        inclinePct = parseDecimal(set.incline) ?: placeholder?.inclinePct,
+        resistanceLevel = parseInt(set.resistance) ?: placeholder?.resistanceLevel,
     )
 
     /**
@@ -107,6 +111,8 @@ object WorkoutMath {
             reps = if (ExerciseTypes.usesReps(type)) r.reps.toString() else set.reps,
             distance = if (ExerciseTypes.usesDistance(type)) WorkoutFormat.weight(r.distanceKm ?: 0.0) else set.distance,
             durationSec = if (ExerciseTypes.usesDuration(type)) r.durationSec ?: 0 else set.durationSec,
+            incline = if (set.incline.isBlank()) r.inclinePct?.let(WorkoutFormat::weight).orEmpty() else set.incline,
+            resistance = if (set.resistance.isBlank()) r.resistanceLevel?.toString().orEmpty() else set.resistance,
             completed = true,
             completedAt = now,
         )

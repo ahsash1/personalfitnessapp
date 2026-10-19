@@ -80,6 +80,7 @@ import kotlin.random.Random
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -201,6 +202,7 @@ class CelebrationViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val log: WorkoutLogRepository,
     private val exercises: ExerciseRepository,
+    private val body: com.example.personalfitnessapp.data.energy.BodyStatsSource,
 ) : ViewModel() {
     private val sessionId: Long = savedStateHandle.get<String>("sessionId")?.toLongOrNull() ?: -1
     private val _summary = MutableStateFlow<WorkoutSummary?>(null)
@@ -212,7 +214,8 @@ class CelebrationViewModel @Inject constructor(
         viewModelScope.launch {
             val session = log.session(sessionId) ?: return@launch
             val catalog = exercises.getAll().associateBy { it.id }
-            _summary.value = Summaries.build(session, log.exercisesOf(sessionId), log.setsOf(sessionId), catalog)
+            val weight = body.stats.firstOrNull()?.weightKg
+            _summary.value = Summaries.build(session, log.exercisesOf(sessionId), log.setsOf(sessionId), catalog, weight)
             _count.value = log.finishedCount()
         }
     }
@@ -273,6 +276,7 @@ fun CelebrationScreen(onDone: () -> Unit, viewModel: CelebrationViewModel = hilt
                             StatColumn("Duration", WorkoutFormat.finishedDuration(s.durationSec), Modifier.weight(1f))
                             StatColumn("Volume", WorkoutFormat.volume(s.volumeKg), Modifier.weight(1f))
                             StatColumn("Sets", s.setCount.toString(), Modifier.weight(1f))
+                            s.kcal?.let { StatColumn("Burned", "$it kcal", Modifier.weight(1f)) }
                             if (s.records > 0) StatColumn("Records", s.records.toString(), Modifier.weight(1f), valueColor = AppGold)
                         }
                         Spacer(Modifier.height(16.dp))

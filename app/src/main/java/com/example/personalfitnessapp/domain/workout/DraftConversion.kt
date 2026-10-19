@@ -37,6 +37,8 @@ object DraftConversion {
                     setType = set.type.takeIf { it != SetType.NORMAL },
                     distanceKm = WorkoutMath.parseDecimal(set.distance)?.toFloat(),
                     durationSec = set.durationSec?.takeIf { it > 0 },
+                    inclinePct = WorkoutMath.parseDecimal(set.incline)?.toFloat(),
+                    resistanceLevel = WorkoutMath.parseInt(set.resistance),
                 )
             }
         }
@@ -68,6 +70,8 @@ object DraftConversion {
                     reps = if (completed) s.reps.toString() else "",
                     distance = if (completed) s.distanceKm?.let { WorkoutFormat.weight(it.toDouble()) }.orEmpty() else "",
                     durationSec = if (completed) s.durationSec else null,
+                    incline = if (completed) s.inclinePct?.let { WorkoutFormat.weight(it.toDouble()) }.orEmpty() else "",
+                    resistance = if (completed) s.resistanceLevel?.toString().orEmpty() else "",
                     rpe = s.rpe?.toDouble(),
                     completed = completed,
                     completedAt = if (completed) s.completedAt else null,
@@ -82,6 +86,8 @@ object DraftConversion {
             distanceKm = it.distanceKm?.toDouble(),
             durationSec = it.durationSec,
             type = it.type,
+            inclinePct = it.inclinePct?.toDouble(),
+            resistanceLevel = it.resistanceLevel,
         )
     }
 }

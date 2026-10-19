@@ -535,6 +535,8 @@ private fun EditorList(
             override fun onAddSet(key: String) = viewModel.addSet(key)
             override fun onRpe(key: String, setKey: String) { sheet = EditorSheet.Rpe(key, setKey) }
             override fun onPlates(key: String) { sheet = EditorSheet.Plates(key) }
+            override fun onIncline(key: String, setKey: String, value: String) = viewModel.setIncline(key, setKey, value)
+            override fun onResistance(key: String, setKey: String, value: String) = viewModel.setResistance(key, setKey, value)
         }
     }
 

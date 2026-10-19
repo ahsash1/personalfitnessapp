@@ -252,7 +252,7 @@ private fun HistoryTab(ui: ExerciseDetailUi, onWorkoutClick: (Long) -> Unit) {
                         Text(labels[i], Modifier.width(56.dp), color = setTypeColor(set.type), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                         Column {
                             Text(
-                                com.example.personalfitnessapp.ui.workout.setSummary(ui.type, set.weightKg.toDouble(), set.reps, set.distanceKm?.toDouble(), set.durationSec),
+                                com.example.personalfitnessapp.ui.workout.setSummary(ui.type, set.weightKg.toDouble(), set.reps, set.distanceKm?.toDouble(), set.durationSec, set.inclinePct?.toDouble(), set.resistanceLevel),
                                 color = AppTextPrimary, fontSize = 16.sp,
                             )
                             val badges = Records.decode(set.prBadges)

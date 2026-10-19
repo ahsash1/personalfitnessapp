@@ -52,5 +52,23 @@ object Migrations {
         }
     }
 
-    val ALL: Array<Migration> = arrayOf(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+    /** Cardio incline/resistance, timed-circuit routines, and the food log. Additive only. */
+    private val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            listOf(
+                "ALTER TABLE `set_logs` ADD COLUMN `inclinePct` REAL",
+                "ALTER TABLE `set_logs` ADD COLUMN `resistanceLevel` INTEGER",
+                "ALTER TABLE `routines` ADD COLUMN `workSeconds` INTEGER",
+                "ALTER TABLE `routines` ADD COLUMN `restSeconds` INTEGER",
+                "ALTER TABLE `routines` ADD COLUMN `rounds` INTEGER",
+                "CREATE TABLE IF NOT EXISTS `food_entries` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "`date` TEXT NOT NULL, `meal` TEXT NOT NULL, `name` TEXT NOT NULL, `grams` REAL, `kcal` REAL NOT NULL, " +
+                    "`proteinG` REAL NOT NULL, `carbsG` REAL NOT NULL, `fatG` REAL NOT NULL, `source` TEXT NOT NULL, " +
+                    "`barcode` TEXT, `createdAt` INTEGER NOT NULL)",
+                "CREATE INDEX IF NOT EXISTS `index_food_entries_date` ON `food_entries` (`date`)",
+            ).forEach(db::execSQL)
+        }
+    }
+
+    val ALL: Array<Migration> = arrayOf(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
 }

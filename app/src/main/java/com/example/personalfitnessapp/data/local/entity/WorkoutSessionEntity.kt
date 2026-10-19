@@ -68,6 +68,10 @@ data class SetLogEntity(
     val durationSec: Int? = null,
     /** Records this set broke when it was logged, e.g. "WEIGHT,ONE_RM"; recomputed on every save. */
     val prBadges: String? = null,
+    /** Treadmill / walking incline in percent grade. */
+    val inclinePct: Float? = null,
+    /** Bike / elliptical resistance level as shown on the machine. */
+    val resistanceLevel: Int? = null,
 ) {
     val type: SetType get() = setType ?: SetType.NORMAL
 }

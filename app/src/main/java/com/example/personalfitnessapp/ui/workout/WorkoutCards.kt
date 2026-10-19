@@ -130,15 +130,24 @@ fun setTypeColor(type: SetType): Color = when (type) {
 fun supersetColor(group: Int?): Color? = group?.let { SupersetColors[(it - 1).mod(SupersetColors.size)] }
 
 /** "20kg x 15", "12 reps", "0 km in 05:00" — the PREVIOUS column and history rows. */
-fun setSummary(type: ExerciseType, weightKg: Double?, reps: Int?, distanceKm: Double?, durationSec: Int?): String = when (type) {
+fun setSummary(
+    type: ExerciseType,
+    weightKg: Double?,
+    reps: Int?,
+    distanceKm: Double?,
+    durationSec: Int?,
+    inclinePct: Double? = null,
+    resistanceLevel: Int? = null,
+): String = when (type) {
     ExerciseType.WEIGHT_REPS -> if (weightKg != null && reps != null) WorkoutFormat.weightReps(weightKg, reps) else "—"
     ExerciseType.REPS_ONLY -> reps?.let { "$it reps" } ?: "—"
     ExerciseType.ASSISTED_BODYWEIGHT -> if (reps != null) "-${WorkoutFormat.weight(weightKg ?: 0.0)}kg x $reps" else "—"
     ExerciseType.DURATION -> durationSec?.let { WorkoutFormat.clock(it.toLong()) } ?: "—"
-    ExerciseType.DISTANCE_DURATION -> WorkoutFormat.distanceTime(distanceKm, durationSec)
+    ExerciseType.DISTANCE_DURATION -> WorkoutFormat.distanceTime(distanceKm, durationSec) +
+        (inclinePct?.let { " · ${WorkoutFormat.weight(it)}%" } ?: "") + (resistanceLevel?.let { " · L$it" } ?: "")
 }
 
-private fun PreviousSet.summary(type: ExerciseType) = setSummary(type, weightKg, reps, distanceKm, durationSec)
+private fun PreviousSet.summary(type: ExerciseType) = setSummary(type, weightKg, reps, distanceKm, durationSec, inclinePct, resistanceLevel)
 
 /** Callbacks from an exercise card; the screen routes them to the ViewModel or opens sheets. */
 interface CardActions {
@@ -156,6 +165,8 @@ interface CardActions {
     fun onDeleteSet(key: String, setKey: String)
     fun onAddSet(key: String)
     fun onRpe(key: String, setKey: String)
+    fun onIncline(key: String, setKey: String, value: String)
+    fun onResistance(key: String, setKey: String, value: String)
     fun onPlates(key: String)
 }
 
@@ -175,6 +186,14 @@ fun ExerciseCard(
     val type = info?.type ?: ExerciseType.WEIGHT_REPS
     val showRpe = options.rpe && type == ExerciseType.WEIGHT_REPS
     val showPlates = options.plates && type == ExerciseType.WEIGHT_REPS && info?.equipment == "Barbell"
+    // Treadmill/walking gets an incline column, bikes/ellipticals a resistance level (for calories).
+    val cardioExtra = if (type != ExerciseType.DISTANCE_DURATION) null else info?.name?.let { n ->
+        when {
+            com.example.personalfitnessapp.domain.EnergyMath.usesIncline(n) -> "INCL %"
+            com.example.personalfitnessapp.domain.EnergyMath.usesResistance(n) -> "LVL"
+            else -> null
+        }
+    }
     val rail = supersetColor(exercise.supersetGroup)
     Column(
         Modifier.fillMaxWidth().padding(top = 16.dp).drawBehind {
@@ -209,7 +228,7 @@ fun ExerciseCard(
             if (!exercise.noteOpen) Chip(Icons.AutoMirrored.Outlined.StickyNote2, "Note") { actions.onNoteChip(exercise.key) }
         }
         if (exercise.noteOpen) NoteLine(exercise.note.orEmpty()) { text, close -> actions.onNote(exercise.key, text, close) }
-        TableHeader(type, showRpe, if (showPlates) ({ actions.onPlates(exercise.key) }) else null)
+        TableHeader(type, showRpe, if (showPlates) ({ actions.onPlates(exercise.key) }) else null, cardioExtra)
         val labels = WorkoutMath.setLabels(exercise.sets)
         exercise.sets.forEachIndexed { index, set ->
             val placeholder = WorkoutMath.placeholder(exercise.sets, index, history.previous)
@@ -232,6 +251,9 @@ fun ExerciseCard(
                     showRpe = showRpe,
                     onRpe = { actions.onRpe(exercise.key, set.key) },
                     inlineTimer = options.inlineTimer,
+                    cardioExtra = cardioExtra,
+                    onIncline = { actions.onIncline(exercise.key, set.key, it) },
+                    onResistance = { actions.onResistance(exercise.key, set.key, it) },
                 )
             }
         }
@@ -285,7 +307,7 @@ private val CheckColWidth = 48.dp
 private val RpeColWidth = 40.dp
 
 @Composable
-private fun TableHeader(type: ExerciseType, showRpe: Boolean, onPlates: (() -> Unit)?) {
+private fun TableHeader(type: ExerciseType, showRpe: Boolean, onPlates: (() -> Unit)?, cardioExtra: String? = null) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         HeaderText("SET", Modifier.width(SetColWidth))
         HeaderText("PREVIOUS", Modifier.weight(1.4f))
@@ -302,6 +324,7 @@ private fun TableHeader(type: ExerciseType, showRpe: Boolean, onPlates: (() -> U
         if (ExerciseTypes.usesDistance(type)) HeaderText("KM", Modifier.weight(1f))
         if (ExerciseTypes.usesReps(type)) HeaderText("REPS", Modifier.weight(1f))
         if (ExerciseTypes.usesDuration(type)) HeaderText("TIME", Modifier.weight(1f))
+        if (cardioExtra != null) HeaderText(cardioExtra, Modifier.weight(0.8f))
         if (showRpe) HeaderText("RPE", Modifier.width(RpeColWidth))
         Box(Modifier.width(CheckColWidth), contentAlignment = Alignment.Center) {
             Icon(Icons.Outlined.Check, null, tint = AppTextSecondary, modifier = Modifier.size(16.dp))
@@ -334,6 +357,9 @@ private fun SetRow(
     showRpe: Boolean = false,
     onRpe: () -> Unit = {},
     inlineTimer: Boolean = false,
+    cardioExtra: String? = null,
+    onIncline: (String) -> Unit = {},
+    onResistance: (String) -> Unit = {},
 ) {
     val offset = remember { Animatable(0f) }
     LaunchedEffect(shake) {
@@ -378,6 +404,10 @@ private fun SetRow(
             }
             if (ExerciseTypes.usesDuration(type)) {
                 DurationCell(set.durationSec, placeholder?.durationSec, set.completed, onDuration, Modifier.weight(1f), inlineTimer)
+            }
+            when (cardioExtra) {
+                "INCL %" -> NumberCell(set.incline, placeholder?.inclinePct?.let(WorkoutFormat::weight).orEmpty(), set.completed, decimal = true, onIncline, Modifier.weight(0.8f))
+                "LVL" -> NumberCell(set.resistance, placeholder?.resistanceLevel?.toString().orEmpty(), set.completed, decimal = false, onResistance, Modifier.weight(0.8f))
             }
             if (showRpe) {
                 Box(Modifier.width(RpeColWidth).height(34.dp).clickable(onClick = onRpe), contentAlignment = Alignment.Center) {

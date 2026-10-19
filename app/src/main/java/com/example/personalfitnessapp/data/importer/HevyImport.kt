@@ -181,6 +181,8 @@ class HevyImporter @Inject constructor(
                             reps = s.reps?.toString().orEmpty(),
                             distance = s.distanceKm?.let { WorkoutFormat.weight(it) }.orEmpty(),
                             durationSec = s.durationSec,
+                            // Hevy has no incline field; people write it in the note ("Incline 8 avg pace 3.3").
+                            incline = ex.notes?.let { Regex("incline\\s*:?\\s*(\\d+(?:\\.\\d+)?)", RegexOption.IGNORE_CASE).find(it)?.groupValues?.get(1) }.orEmpty(),
                             rpe = s.rpe,
                             completed = true,
                             completedAt = w.endedAt,

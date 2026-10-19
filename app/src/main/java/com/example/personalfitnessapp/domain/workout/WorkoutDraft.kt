@@ -34,6 +34,9 @@ data class DraftSet(
     val distance: String = "",
     /** Cardio/timed sets store seconds directly (entered through a duration field). */
     val durationSec: Int? = null,
+    /** Treadmill incline % / machine resistance level, as typed. */
+    val incline: String = "",
+    val resistance: String = "",
     val rpe: Double? = null,
     val completed: Boolean = false,
     val completedAt: Long? = null,
@@ -48,4 +51,6 @@ data class PreviousSet(
     val distanceKm: Double?,
     val durationSec: Int?,
     val type: SetType,
+    val inclinePct: Double? = null,
+    val resistanceLevel: Int? = null,
 )

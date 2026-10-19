@@ -10,7 +10,13 @@ data class RoutineEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val notes: String,
-)
+    /** Set for timed circuits (e.g. 50 s work / 10 s rest): the routine runs in the interval player. */
+    val workSeconds: Int? = null,
+    val restSeconds: Int? = null,
+    val rounds: Int? = null,
+) {
+    val isCircuit: Boolean get() = workSeconds != null
+}
 
 @Entity(
     tableName = "routine_exercises",

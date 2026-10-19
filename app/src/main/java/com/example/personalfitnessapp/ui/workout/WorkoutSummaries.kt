@@ -45,6 +45,8 @@ data class WorkoutSummary(
     val records: Int,
     val exercises: List<SummaryExercise>,
     val media: List<String> = emptyList(),
+    /** Net calories burned (above resting), when bodyweight is known. */
+    val kcal: Int? = null,
 )
 
 object Summaries {
@@ -53,6 +55,7 @@ object Summaries {
         exerciseRows: List<SessionExerciseEntity>,
         sets: List<SetLogEntity>,
         catalog: Map<String, ExerciseEntity>,
+        weightKg: Double? = null,
     ): WorkoutSummary {
         val setsByExercise = sets.groupBy { it.exerciseId }.mapValues { (_, l) -> l.sortedBy { it.setIndex } }
         val ordered = exerciseRows.sortedBy { it.order }.map { it.exerciseId to it.note }.distinctBy { it.first }
@@ -85,11 +88,24 @@ object Summaries {
             records = sets.sumOf { Records.decode(it.prBadges).size },
             exercises = exercises,
             media = session.mediaUris.orEmpty(),
+            kcal = weightKg?.let { kg -> energy(exercises, ((session.endedAt ?: session.startedAt) - session.startedAt) / 60_000.0, kg).total.toInt() },
         )
     }
 
+    fun energy(exercises: List<SummaryExercise>, sessionMinutes: Double, weightKg: Double): com.example.personalfitnessapp.domain.EnergyMath.WorkoutEnergy =
+        com.example.personalfitnessapp.domain.EnergyMath.workout(
+            exercises.flatMap { ex ->
+                ex.sets.filter { it.type != SetType.WARMUP || ex.type == ExerciseType.DISTANCE_DURATION }.map { s ->
+                    com.example.personalfitnessapp.domain.EnergyMath.EnergySet(
+                        ex.name, ex.type, s.durationSec, s.distanceKm?.toDouble(), s.inclinePct?.toDouble(), s.resistanceLevel,
+                    )
+                }
+            },
+            sessionMinutes, weightKg,
+        )
+
     fun setText(ex: SummaryExercise, set: SetLogEntity): String =
-        setSummary(ex.type, set.weightKg.toDouble(), set.reps, set.distanceKm?.toDouble(), set.durationSec)
+        setSummary(ex.type, set.weightKg.toDouble(), set.reps, set.distanceKm?.toDouble(), set.durationSec, set.inclinePct?.toDouble(), set.resistanceLevel)
 
     fun shareText(s: WorkoutSummary): String = buildString {
         appendLine(s.title)
@@ -123,17 +139,19 @@ fun restSecondsFor(exercise: ExerciseEntity, prefs: WorkoutPrefs): Int {
 class WorkoutSummariesSource @Inject constructor(
     log: WorkoutLogRepository,
     exercises: com.example.personalfitnessapp.data.repository.ExerciseRepository,
+    body: com.example.personalfitnessapp.data.energy.BodyStatsSource,
 ) {
     val summaries: kotlinx.coroutines.flow.Flow<List<WorkoutSummary>> = kotlinx.coroutines.flow.combine(
         log.observeFinished(),
         log.observeFinishedSets(),
         log.observeFinishedSessionExercises(),
         exercises.observeAll(),
-    ) { sessions, sets, rows, all ->
+        body.stats,
+    ) { sessions, sets, rows, all, stats ->
         val catalog = all.associateBy { it.id }
         val setsBySession = sets.groupBy { it.sessionId }
         val rowsBySession = rows.groupBy { it.sessionId }
-        sessions.map { Summaries.build(it, rowsBySession[it.id].orEmpty(), setsBySession[it.id].orEmpty(), catalog) }
+        sessions.map { Summaries.build(it, rowsBySession[it.id].orEmpty(), setsBySession[it.id].orEmpty(), catalog, stats?.weightKg) }
     }
 }
 

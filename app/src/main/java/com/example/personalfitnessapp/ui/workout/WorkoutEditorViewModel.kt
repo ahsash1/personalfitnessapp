@@ -226,6 +226,8 @@ class WorkoutEditorViewModel @Inject constructor(
     fun setReps(key: String, setKey: String, v: String) = edit { DraftOps.updateSet(it, key, setKey) { s -> s.copy(reps = v) } }
     fun setDistance(key: String, setKey: String, v: String) = edit { DraftOps.updateSet(it, key, setKey) { s -> s.copy(distance = v) } }
     fun setDuration(key: String, setKey: String, sec: Int?) = edit { DraftOps.updateSet(it, key, setKey) { s -> s.copy(durationSec = sec) } }
+    fun setIncline(key: String, setKey: String, v: String) = edit { DraftOps.updateSet(it, key, setKey) { s -> s.copy(incline = v) } }
+    fun setResistance(key: String, setKey: String, v: String) = edit { DraftOps.updateSet(it, key, setKey) { s -> s.copy(resistance = v) } }
     fun setRpe(key: String, setKey: String, rpe: Double?) = edit { DraftOps.updateSet(it, key, setKey) { s -> s.copy(rpe = rpe) } }
 
     /** The weight warm-ups ramp toward: the first working set's entered or placeholder weight. */

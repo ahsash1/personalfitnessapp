@@ -116,13 +116,14 @@ class WorkoutDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val log: WorkoutLogRepository,
     private val exercises: ExerciseRepository,
+    body: com.example.personalfitnessapp.data.energy.BodyStatsSource,
     actions: WorkoutActions,
 ) : WorkoutMenuViewModel(actions) {
     val sessionId: Long = savedStateHandle.get<String>("sessionId")?.toLongOrNull() ?: -1
     val summary: StateFlow<WorkoutSummary?> = log.observeSession(sessionId).flatMapLatest { session ->
         if (session == null) flowOf(null)
-        else exercises.observeAll().map { all ->
-            Summaries.build(session, log.exercisesOf(sessionId), log.setsOf(sessionId), all.associateBy { it.id })
+        else combine(exercises.observeAll(), body.stats) { all, stats ->
+            Summaries.build(session, log.exercisesOf(sessionId), log.setsOf(sessionId), all.associateBy { it.id }, stats?.weightKg)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 }
@@ -224,6 +225,7 @@ internal fun FeedCard(s: WorkoutSummary, name: String, now: Long, onClick: () ->
         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
             StatColumn("Time", WorkoutFormat.finishedDuration(s.durationSec), Modifier.width(100.dp))
             StatColumn("Volume", WorkoutFormat.volume(s.volumeKg), Modifier.width(110.dp))
+            s.kcal?.let { StatColumn("Burned", "$it kcal", Modifier.width(90.dp)) }
             if (s.records > 0) StatColumn("Records", s.records.toString(), Modifier.width(90.dp), valueColor = AppGold)
         }
         if (s.media.isNotEmpty()) PhotoStrip(s.media)
@@ -278,6 +280,10 @@ fun WorkoutDetailScreen(
                         StatColumn("Volume", WorkoutFormat.volume(s.volumeKg), Modifier.weight(1f))
                         StatColumn("Sets", s.setCount.toString(), Modifier.weight(1f))
                         StatColumn("Records", s.records.toString(), Modifier.weight(1f), valueColor = if (s.records > 0) AppGold else AppTextPrimary)
+                    }
+                    s.kcal?.let {
+                        Spacer(Modifier.height(8.dp))
+                        Text("About $it kcal burned above resting (estimate from duration, cardio speed/incline/level and bodyweight)", color = AppTextSecondary, fontSize = 13.sp)
                     }
                 }
                 if (s.media.isNotEmpty()) PhotoStrip(s.media)
