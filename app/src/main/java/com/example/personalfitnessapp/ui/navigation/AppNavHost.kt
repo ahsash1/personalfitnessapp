@@ -29,7 +29,6 @@ import androidx.navigation.compose.rememberNavController
 import com.example.personalfitnessapp.ui.browser.ExerciseBrowserScreen
 import com.example.personalfitnessapp.ui.coach.CoachChatScreen
 import com.example.personalfitnessapp.ui.detail.ExerciseDetailScreen
-import com.example.personalfitnessapp.ui.detail.ExerciseHistoryScreen
 import com.example.personalfitnessapp.ui.history.SessionHistoryScreen
 import com.example.personalfitnessapp.ui.metrics.BodyMetricsScreen
 import com.example.personalfitnessapp.ui.onboarding.OnboardingScreen
@@ -68,8 +67,7 @@ object Routes {
     const val WORKOUT_TAB = "workout_tab"
     const val PROFILE = "profile"
     const val EXERCISE_BROWSER = "exercise_browser"
-    const val EXERCISE_DETAIL = "exercise_detail/{exerciseId}"
-    const val EXERCISE_HISTORY = "exercise_history/{exerciseId}"
+    const val EXERCISE_DETAIL = "exercise_detail/{exerciseId}?add={add}&tab={tab}"
     const val SETTINGS = "settings"
     const val ACTIVE_WORKOUT = "active_workout"
     const val EDIT_WORKOUT = "edit_workout/{sessionId}"
@@ -90,8 +88,7 @@ object Routes {
     const val PHOTO_CONFIRMATION = "photo_confirmation/{photoPath}"
     const val AI_CONNECTION = "ai_connection"
 
-    fun exerciseDetail(exerciseId: String) = "exercise_detail/$exerciseId"
-    fun exerciseHistory(exerciseId: String) = "exercise_history/$exerciseId"
+    fun exerciseDetail(exerciseId: String, add: Boolean = false) = "exercise_detail/$exerciseId?add=$add&tab=summary"
     fun photoConfirmation(photoPath: String) = "photo_confirmation/${android.net.Uri.encode(photoPath)}"
     fun sessionDetail(sessionId: Long) = "session_detail/$sessionId"
     fun routineEditor(routineId: Long) = "routine_editor/$routineId"
@@ -196,14 +193,21 @@ fun AppNavHost(
                     onIdentifyEquipmentClick = { navController.navigate(Routes.PHOTO_CAPTURE) },
                 )
             }
-            composable(Routes.EXERCISE_DETAIL) {
+            composable(
+                Routes.EXERCISE_DETAIL,
+                arguments = listOf(
+                    androidx.navigation.navArgument("add") { type = androidx.navigation.NavType.StringType; defaultValue = "false" },
+                    androidx.navigation.navArgument("tab") { type = androidx.navigation.NavType.StringType; defaultValue = "summary" },
+                ),
+            ) {
                 ExerciseDetailScreen(
                     onBackClick = { navController.popBackStack() },
-                    onHistoryClick = { id -> navController.navigate(Routes.exerciseHistory(id)) },
+                    onWorkoutClick = { id -> navController.navigate(Routes.sessionDetail(id)) },
+                    onAdd = { id ->
+                        navController.previousBackStackEntry?.savedStateHandle?.set(SELECT_KEY, id)
+                        navController.popBackStack()
+                    },
                 )
-            }
-            composable(Routes.EXERCISE_HISTORY) {
-                ExerciseHistoryScreen(onBackClick = { navController.popBackStack() })
             }
             composable(Routes.PHOTO_CAPTURE) {
                 PhotoCaptureScreen(
@@ -266,7 +270,10 @@ fun AppNavHost(
                 ),
             ) { entry ->
                 val single = entry.arguments?.getString("single") == "true"
+                val selectRequest by entry.savedStateHandle.getStateFlow<String?>(SELECT_KEY, null).collectAsState()
                 AddExerciseScreen(
+                    selectRequest = selectRequest,
+                    onSelectConsumed = { entry.savedStateHandle[SELECT_KEY] = null },
                     onCancel = { navController.popBackStack() },
                     onDone = { ids ->
                         navController.previousBackStackEntry?.savedStateHandle?.let { handle ->
@@ -274,7 +281,7 @@ fun AppNavHost(
                         }
                         navController.popBackStack()
                     },
-                    onInfo = { id -> navController.navigate(Routes.exerciseDetail(id)) },
+                    onInfo = { id -> navController.navigate(Routes.exerciseDetail(id, add = true)) },
                 )
             }
             composable(Routes.SAVE_WORKOUT) {
@@ -414,6 +421,7 @@ private fun NavHostController.navigateToTopLevel(route: String) {
 }
 
 private const val PICKED_KEY = "pickedExerciseIds"
+private const val SELECT_KEY = "selectExercise"
 private const val REPLACEMENT_KEY = "replacementExerciseId"
 
 @Composable

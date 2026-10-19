@@ -126,6 +126,8 @@ class AddExerciseViewModel @Inject constructor(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddExerciseScreen(
+    selectRequest: String? = null,
+    onSelectConsumed: () -> Unit = {},
     onCancel: () -> Unit,
     onDone: (List<String>) -> Unit,
     onInfo: (String) -> Unit,
@@ -133,6 +135,13 @@ fun AddExerciseScreen(
 ) {
     val state by viewModel.state.collectAsState()
     var filterSheet by remember { mutableStateOf<String?>(null) }
+    // "Add exercise" on Exercise Detail comes back here as a selection.
+    androidx.compose.runtime.LaunchedEffect(selectRequest) {
+        if (selectRequest != null) {
+            if (selectRequest !in state.selected) viewModel.toggle(selectRequest)
+            onSelectConsumed()
+        }
+    }
 
     Scaffold(
         containerColor = AppBackground,

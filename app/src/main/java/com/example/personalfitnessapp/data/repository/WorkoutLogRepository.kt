@@ -189,6 +189,8 @@ class WorkoutLogRepository @Inject constructor(
     suspend fun finishedSessions(): List<WorkoutSessionEntity> = dao.finishedSessions()
     suspend fun finishedCount(): Int = dao.finishedCount()
     suspend fun recentExerciseIds(limit: Int = 30): List<String> = dao.recentExerciseIds(limit)
+    fun observeSessionsWithExercise(exerciseId: String): Flow<List<WorkoutSessionEntity>> = dao.observeSessionsWithExercise(exerciseId)
+    fun observeSetsForExercise(exerciseId: String): Flow<List<SetLogEntity>> = dao.observeSetsForExercise(exerciseId)
 
     /** For the CSV import: a finished workout written directly, with records recomputed afterwards by the caller. */
     suspend fun insertFinished(session: WorkoutSessionEntity, draft: WorkoutDraft): Long = db.withTransaction {
