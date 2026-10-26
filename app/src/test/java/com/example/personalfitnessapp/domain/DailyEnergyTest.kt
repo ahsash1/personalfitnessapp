@@ -50,4 +50,11 @@ class DailyEnergyTest {
         val burn = 1646 + 0.1 * t + 500
         assertEquals(-250.0, t - burn, 1.0)
     }
+
+    @Test
+    fun `halfway through today only half of resting and everyday movement count`() {
+        val b = DailyEnergy.burn(1600.0, 0.0, healthActiveKcal = null, healthSteps = 4000, stepsToKcal = steps, workoutsKcal = 0.0, dayFraction = 0.5)
+        assertEquals(800.0, b.resting, 0.01)
+        assertEquals(200.0 + steps(4000), b.activity, 0.01)
+    }
 }

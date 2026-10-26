@@ -40,9 +40,10 @@ object DailyEnergy {
         stepsToKcal: (Long) -> Double,
         workoutsKcal: Double,
         estimateWhenMissing: Boolean = true,
+        dayFraction: Double = 1.0,
     ): Burn {
-        val (activity, source) = activity(bmr, healthActiveKcal, healthSteps, stepsToKcal, estimateWhenMissing)
-        return Burn(bmr, eatenKcal * THERMIC_EFFECT, activity, source, healthSteps, workoutsKcal)
+        val (activity, source) = activity(bmr, healthActiveKcal, healthSteps, stepsToKcal, estimateWhenMissing, dayFraction)
+        return Burn(bmr * dayFraction, eatenKcal * THERMIC_EFFECT, activity, source, healthSteps, workoutsKcal)
     }
 
     /** Everyday movement a step counter misses. */
@@ -60,8 +61,10 @@ object DailyEnergy {
         healthSteps: Long?,
         stepsToKcal: (Long) -> Double,
         estimateWhenMissing: Boolean = true,
+        dayFraction: Double = 1.0,
     ): Pair<Double, ActivitySource> {
-        val base = everydayMovement(bmr)
+        // Resting and everyday movement build up through the day; [dayFraction] < 1 for "so far today".
+        val base = everydayMovement(bmr) * dayFraction
         val fromSteps = healthSteps?.let { base + stepsToKcal(it) }
         val active = healthActiveKcal?.takeIf { it > 0 }
         return when {

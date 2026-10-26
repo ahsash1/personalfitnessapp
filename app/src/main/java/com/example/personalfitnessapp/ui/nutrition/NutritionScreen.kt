@@ -431,6 +431,10 @@ private fun ActivityCard(
                         ).joinToString(" · "),
                         color = AppTextSecondary, fontSize = 14.sp,
                     )
+                    Text(
+                        "Synced from Samsung Health. Samsung's \"total burnt\" is resting + activity only; this app also counts digesting food and light everyday movement (sitting, standing, chores), so its total is higher.",
+                        color = AppTextSecondary, fontSize = 12.sp,
+                    )
                     val inWorkouts = count - (h?.steps ?: count)
                     if (inWorkouts > 0) Text("%,d of these were during logged workouts, so they count toward the workout instead.".format(Locale.US, inWorkouts), color = AppTextSecondary, fontSize = 12.sp)
                 }
@@ -510,7 +514,7 @@ private fun DayBalance(day: DayNutrition, justLogged: JustLogged?, goal: Nutriti
         else -> 0.0
     }
     val out = listOf(
-        Triple("Resting (full day)", burn.resting, RestingColor),
+        Triple(if (day.closed) "Resting (full day)" else "Resting (so far today)", burn.resting, RestingColor),
         Triple("Everyday movement", everyday, EverydayColor),
         Triple(
             when (burn.activitySource) {
@@ -532,6 +536,7 @@ private fun DayBalance(day: DayNutrition, justLogged: JustLogged?, goal: Nutriti
     if (day.eatenKcal < 0.5) Text("Nothing logged yet. Each meal you add fills the In bar.", color = AppTextSecondary, fontSize = 13.sp)
     Spacer(Modifier.height(6.dp))
     out.filter { it.second > 0.5 }.forEach { (label, kcal, color) -> LegendRow(label, kcal, color) }
+    day.projectedBurn?.let { Text("By midnight you'll have burned about ${it.k()} kcal at this rate.", color = AppTextSecondary, fontSize = 12.sp) }
     if (burn.activitySource == DailyEnergy.ActivitySource.ESTIMATE) Text("Steps not connected: everyday movement is an estimate.", color = AppTextSecondary, fontSize = 12.sp)
     day.stats?.let { s ->
         val inches = (s.heightCm / 2.54).roundToInt()

@@ -67,6 +67,8 @@ data class DayNutrition(
     val workouts: List<WorkoutSummary>,
     /** True once the day has ended at midnight and its number is locked in. */
     val closed: Boolean,
+    /** Today only: what the day's total burn will roughly be by midnight. */
+    val projectedBurn: Double?,
     /** kcal per meal, in [MealType] order, for the balance bar. */
     val byMeal: List<Double>,
     val stats: BodyStats?,
@@ -187,6 +189,10 @@ class NutritionViewModel @Inject constructor(
     ): DayNutrition {
         val eaten = entries.sumOf { it.kcal.toDouble() }
         val d = _date.value
+        // Today counts resting and everyday movement only up to now, like Samsung Health does.
+        val fraction = if (d == LocalDate.now(zone)) {
+            ((clock.millis() - d.atStartOfDay(zone).toInstant().toEpochMilli()) / 86_400_000.0).coerceIn(0.01, 1.0)
+        } else 1.0
         val workouts = workoutsOn(d, all)
         val closed = d.isBefore(LocalDate.now(zone))
         // A finished day shows the number locked in at midnight, so the card matches the history chart.
@@ -202,6 +208,7 @@ class NutritionViewModel @Inject constructor(
             )
         } ?: s?.let {
             DailyEnergy.burn(
+                dayFraction = fraction,
                 bmr = it.bmr,
                 eatenKcal = eaten,
                 healthActiveKcal = h?.activeKcal,
@@ -225,6 +232,10 @@ class NutritionViewModel @Inject constructor(
             burn = burn,
             workouts = workouts,
             closed = closed,
+            projectedBurn = burn?.takeIf { fraction < 1.0 && locked == null }?.let { b ->
+                val s0 = s ?: return@let null
+                b.total + (s0.bmr + DailyEnergy.everydayMovement(s0.bmr)) * (1 - fraction)
+            },
             byMeal = MealType.entries.map { m -> entries.filter { it.meal == m }.sumOf { it.kcal.toDouble() } },
             stats = s,
         )
