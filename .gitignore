@@ -13,3 +13,5 @@
 .externalNativeBuild
 .cxx
 local.properties
+# personal workout export, never commit
+app/src/main/assets/seed/*export*.csv

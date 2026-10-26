@@ -21,7 +21,6 @@ class FitnessApp : Application() {
         super.onCreate()
         applicationScope.launch {
             exerciseSeeder.seedIfNeeded()
-            runCatching { bundledImport.runOnce() }
             runCatching { bundledImport.refreshRecordsOnce() }
             runCatching { bundledImport.circuitsOnce() }
         }
