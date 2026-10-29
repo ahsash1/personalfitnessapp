@@ -435,6 +435,20 @@ private fun ActivityCard(
                         "Synced from Samsung Health. Samsung's \"total burnt\" is resting + activity only; this app also counts digesting food and light everyday movement (sitting, standing, chores), so its total is higher.",
                         color = AppTextSecondary, fontSize = 12.sp,
                     )
+                    h?.stepSources?.takeIf { it.isNotEmpty() }?.let { src ->
+                        Text(
+                            "Sources: " + src.entries.sortedByDescending { it.value }.joinToString(" · ") { (pkg, n) ->
+                                val name = when (pkg) {
+                                    "com.sec.android.app.shealth" -> "Samsung Health"
+                                    "com.google.android.apps.fitness" -> "Google Fit"
+                                    "com.google.android.apps.healthdata" -> "Health Connect"
+                                    else -> pkg.substringAfterLast('.')
+                                }
+                                "$name %,d".format(Locale.US, n)
+                            } + if (src.size > 1) " (the highest one is used, never added together)" else "",
+                            color = AppTextSecondary, fontSize = 12.sp,
+                        )
+                    }
                     val inWorkouts = count - (h?.steps ?: count)
                     if (inWorkouts > 0) Text("%,d of these were during logged workouts, so they count toward the workout instead.".format(Locale.US, inWorkouts), color = AppTextSecondary, fontSize = 12.sp)
                 }

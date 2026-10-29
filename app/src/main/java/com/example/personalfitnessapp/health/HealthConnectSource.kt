@@ -29,6 +29,8 @@ data class HealthActivity(
     val stepsAllowed: Boolean = true,
     /** Apps that had written steps/calories for the period (only filled when raw records were read). */
     val origins: Set<String> = emptySet(),
+    /** Steps each app recorded for the whole period (overlaps counted once), to compare with Samsung Health. */
+    val stepSources: Map<String, Long> = emptyMap(),
     val error: String? = null,
 )
 
@@ -67,11 +69,12 @@ class HealthConnectSource @Inject constructor(@ApplicationContext private val co
         if (!canSteps && !canKcal) return HealthActivity(null, null, stepsAllowed = false)
         if (!end.isAfter(start)) return HealthActivity(0, 0.0, stepsAllowed = canSteps)
         val windows = exclude.map { (a, b) -> maxOf(a, start) to minOf(b, end) }.filter { (a, b) -> b.isAfter(a) }
-        val aggregated = runCatching { aggregated(start, end, windows, canSteps, canKcal) }
-        aggregated.getOrNull()?.let { if (!canSteps || it.totalSteps != null) return it }
-        return runCatching { fromRecords(start, end, windows, canSteps, canKcal) }.getOrElse { e ->
-            val cause = aggregated.exceptionOrNull() ?: e
-            HealthActivity(null, null, stepsAllowed = canSteps, error = cause.message ?: cause.javaClass.simpleName)
+        // Raw records first: Health Connect's own totals over-counted Samsung Health's overlapping
+        // step records. Its totals are only a fallback if reading records fails or finds nothing.
+        val records = runCatching { fromRecords(start, end, windows, canSteps, canKcal) }
+        records.getOrNull()?.let { if (it.totalSteps != null || it.totalActiveKcal != null) return it }
+        return runCatching { aggregated(start, end, windows, canSteps, canKcal) }.getOrElse { e ->
+            records.getOrNull() ?: HealthActivity(null, null, stepsAllowed = canSteps, error = (records.exceptionOrNull() ?: e).message ?: e.javaClass.simpleName)
         }
     }
 
@@ -112,6 +115,7 @@ class HealthConnectSource @Inject constructor(@ApplicationContext private val co
             totalActiveKcal = k?.first,
             stepsAllowed = canSteps,
             origins = (steps + kcal).map { it.origin }.toSet(),
+            stepSources = HealthMath.perOrigin(steps, start, end).mapValues { it.value.roundToLong() },
         )
     }
 

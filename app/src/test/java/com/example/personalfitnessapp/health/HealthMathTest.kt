@@ -32,4 +32,13 @@ class HealthMathTest {
     fun `no samples means no data, not zero`() {
         assertNull(HealthMath.net(emptyList(), t0, at(60), emptyList()))
     }
+
+    @Test
+    fun `Samsung's per-minute records and an hourly summary of the same steps count once`() {
+        val minuteRecords = (0 until 60).map { HealthSample(at(60 + it.toLong()), at(61 + it.toLong()), 50.0, "shealth") }
+        val hourly = HealthSample(at(60), at(120), 3000.0, "shealth")
+        val daily = HealthSample(at(0), at(24 * 60), 3000.0, "shealth")
+        val (total, _) = HealthMath.net(minuteRecords + hourly + daily, t0, at(24 * 60), emptyList())!!
+        assertEquals(3000.0, total, 1.0)
+    }
 }
